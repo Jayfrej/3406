@@ -1,5 +1,3 @@
-
-
 // MT5 Trading Bot Frontend JavaScript with Copy Trading
 class TradingBotUI {
   constructor() {
@@ -1403,7 +1401,7 @@ async loadData() {
           </div>
           <div class="pair-content">
             <div class="account-info">
-              <h5><i class="fas fa-user-crown"></i> Master</h5>
+              <h5> Master</h5>
               <div class="info-grid">
                 <div><strong>Login:</strong> ${this.escape(pair.master.login)}</div>
                 <div><strong>Server:</strong> ${this.escape(pair.master.server)}</div>
@@ -1414,7 +1412,7 @@ async loadData() {
               <i class="fas fa-arrow-right"></i>
             </div>
             <div class="account-info">
-              <h5><i class="fas fa-user"></i> Slave</h5>
+              <h5>Slave</h5>
               <div class="info-grid">
                 <div><strong>Login:</strong> ${this.escape(pair.slave.login)}</div>
                 <div><strong>Server:</strong> ${this.escape(pair.slave.server)}</div>
@@ -1734,6 +1732,290 @@ async loadData() {
     if (modal) {
       modal.remove();
     }
+  }
+
+  // ============= เพิ่ม Account เข้าคู่เดิม =============
+  showAddAccountModal(pairId) {
+  const pair = this.copyPairs.find(p => p.id === pairId);
+  if (!pair) {
+    this.showToast('Pair not found', 'error');
+    return;
+  }
+
+  const modal = document.createElement('div');
+  modal.id = 'addAccountModal';
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3><i class="fas fa-user-plus"></i> Add Account to Pair</h3>
+        <button class="modal-close" onclick="ui.closeAddAccountModal()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <p style="color: var(--text-dim); margin-bottom: 15px;">
+            Current API Key: <strong>${pair.apiKey || pair.api_key}</strong>
+          </p>
+        </div>
+        
+        <div class="button-group" style="display: flex; gap: 15px; flex-direction: column;">
+          <button class="btn btn-success btn-lg" onclick="ui.showAddMasterToPair('${pairId}')" 
+                  style="padding: 20px; display: flex; align-items: center; gap: 15px; text-align: left;">
+            
+            <div style="flex: 1;">
+              <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 5px;">Add Master Account</div>
+              <div style="font-size: 0.85rem; opacity: 0.9;">Add another master to this pair</div>
+            </div>
+          </button>
+          
+          <button class="btn btn-primary btn-lg" onclick="ui.showAddSlaveToPair('${pairId}')" 
+                  style="padding: 20px; display: flex; align-items: center; gap: 15px; text-align: left;">
+            
+            <div style="flex: 1;">
+              <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 5px;">Add Slave Account</div>
+              <div style="font-size: 0.85rem; opacity: 0.9;">Add slave with settings configuration</div>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  setTimeout(() => modal.classList.add('show'), 10);
+  }
+
+  closeAddAccountModal() {
+    const modal = document.getElementById('addAccountModal');
+    if (modal) {
+      modal.classList.remove('show');
+      setTimeout(() => modal.remove(), 300);
+    }
+  }
+
+  showAddMasterToPair(pairId) {
+  this.closeAddAccountModal();
+  
+  const modal = document.createElement('div');
+  modal.id = 'addMasterModal';
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3> Add Master to Pair</h3>
+        <button class="modal-close" onclick="ui.closeAddMasterModal()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Select Master Account</label>
+          <select id="addMasterSelect" class="form-input">
+            <option value="">-- Select Account --</option>
+            ${this.masterAccounts.map(acc => `
+              <option value="${acc.accountNumber}">
+                ${acc.accountNumber} ${acc.nickname ? '(' + acc.nickname + ')' : ''}
+              </option>
+            `).join('')}
+          </select>
+        </div>
+        
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="ui.closeAddMasterModal()">Cancel</button>
+          <button class="btn btn-success" onclick="ui.confirmAddMaster('${pairId}')">
+            <i class="fas fa-plus"></i> Add Master
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  setTimeout(() => modal.classList.add('show'), 10);
+  }
+
+  closeAddMasterModal() {
+    const modal = document.getElementById('addMasterModal');
+    if (modal) {
+      modal.classList.remove('show');
+      setTimeout(() => modal.remove(), 300);
+    }
+  }
+
+  async confirmAddMaster(pairId) {
+  const masterAccount = document.getElementById('addMasterSelect')?.value;
+  
+  if (!masterAccount) {
+    this.showToast('Please select a master account', 'warning');
+    return;
+  }
+
+  try {
+    this.showLoading();
+    
+    const response = await fetch(`/api/pairs/${pairId}/add-master`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ master_account: masterAccount })
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      this.showToast('Master account added successfully', 'success');
+      this.closeAddMasterModal();
+      await this.loadPlans();
+      this.renderPlans();
+      if (this.renderActivePairsTable) this.renderActivePairsTable();
+    } else {
+      this.showToast(data.error || 'Failed to add master account', 'error');
+    }
+  } catch (error) {
+    console.error('Add master error:', error);
+    this.showToast('Failed to add master account', 'error');
+  } finally {
+    this.hideLoading();
+  }
+  }
+
+  showAddSlaveToPair(pairId) {
+  this.closeAddAccountModal();
+  
+  const pair = this.copyPairs.find(p => p.id === pairId);
+  const settings = pair?.settings || {};
+  
+  const modal = document.createElement('div');
+  modal.id = 'addSlaveModal';
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3>Add Slave to Pair</h3>
+        <button class="modal-close" onclick="ui.closeAddSlaveModal()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Select Slave Account</label>
+          <select id="addSlaveSelect" class="form-input">
+            <option value="">-- Select Account --</option>
+            ${this.slaveAccounts.map(acc => `
+              <option value="${acc.accountNumber}">
+                ${acc.accountNumber} ${acc.nickname ? '(' + acc.nickname + ')' : ''}
+              </option>
+            `).join('')}
+          </select>
+        </div>
+
+        <div class="settings-section" style="background: var(--surface-2); padding: 15px; border-radius: 8px; margin-top: 20px;">
+          <h4 style="margin-bottom: 15px; font-size: 0.95rem;">
+            <i class="fas fa-cog"></i> Copy Settings
+          </h4>
+          
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="addSlaveAutoMapSymbol" ${settings.auto_map_symbol !== false ? 'checked' : ''}>
+              <span>Auto Map Symbol</span>
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="addSlaveAutoMapVolume" ${settings.auto_map_volume !== false ? 'checked' : ''}>
+              <span>Auto Map Volume</span>
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="addSlaveCopyPSL" ${settings.copy_psl !== false ? 'checked' : ''}>
+              <span>Copy TP/SL</span>
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label>Volume Mode</label>
+            <select id="addSlaveVolumeMode" class="form-input">
+              <option value="multiply" ${settings.volume_mode === 'multiply' ? 'selected' : ''}>Multiply</option>
+              <option value="fixed" ${settings.volume_mode === 'fixed' ? 'selected' : ''}>Fixed</option>
+              <option value="percent" ${settings.volume_mode === 'percent' ? 'selected' : ''}>Percent</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Multiplier / Fixed Volume / Percent</label>
+            <input type="number" id="addSlaveMultiplier" class="form-input" 
+                   value="${settings.multiplier || 2}" step="0.01" min="0.01">
+          </div>
+        </div>
+        
+        <div class="modal-actions" style="margin-top: 20px;">
+          <button class="btn btn-secondary" onclick="ui.closeAddSlaveModal()">Cancel</button>
+          <button class="btn btn-success" onclick="ui.confirmAddSlave('${pairId}')">
+            <i class="fas fa-plus"></i> Add Slave
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  setTimeout(() => modal.classList.add('show'), 10);
+  }
+
+  closeAddSlaveModal() {
+    const modal = document.getElementById('addSlaveModal');
+    if (modal) {
+      modal.classList.remove('show');
+      setTimeout(() => modal.remove(), 300);
+    }
+  }
+
+  async confirmAddSlave(pairId) {
+  const slaveAccount = document.getElementById('addSlaveSelect')?.value;
+  
+  if (!slaveAccount) {
+    this.showToast('Please select a slave account', 'warning');
+    return;
+  }
+
+  const settings = {
+    auto_map_symbol: document.getElementById('addSlaveAutoMapSymbol')?.checked ?? true,
+    auto_map_volume: document.getElementById('addSlaveAutoMapVolume')?.checked ?? true,
+    copy_psl: document.getElementById('addSlaveCopyPSL')?.checked ?? true,
+    volume_mode: document.getElementById('addSlaveVolumeMode')?.value || 'multiply',
+    multiplier: parseFloat(document.getElementById('addSlaveMultiplier')?.value || '2')
+  };
+
+  try {
+    this.showLoading();
+    
+    const response = await fetch(`/api/pairs/${pairId}/add-slave`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        slave_account: slaveAccount,
+        settings: settings
+      })
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      this.showToast('Slave account added successfully', 'success');
+      this.closeAddSlaveModal();
+      await this.loadPlans();
+      this.renderPlans();
+      if (this.renderActivePairsTable) this.renderActivePairsTable();
+    } else {
+      this.showToast(data.error || 'Failed to add slave account', 'error');
+    }
+  } catch (error) {
+    console.error('Add slave error:', error);
+    this.showToast('Failed to add slave account', 'error');
+  } finally {
+    this.hideLoading();
+  }
   }
 
   async confirmCreatePair() {
@@ -2092,9 +2374,7 @@ async loadData() {
         <div class="plan-item-card">
           <div class="plan-item-header">
             <div class="plan-item-accounts">
-              <div class="plan-item-account master">
-                <i class="fas fa-user-crown"></i>
-                <div class="plan-item-account-info">
+              <div class="plan-item-account master"> <div class="plan-item-account-info">
                   <div class="plan-item-account-number">${this.escape(plan.masterAccount)}</div>
                   ${plan.masterNickname ? `<div class="plan-item-account-nickname">${this.escape(plan.masterNickname)}</div>` : ''}
                 </div>
@@ -2137,6 +2417,11 @@ async loadData() {
           </div>
           
           <div class="plan-item-actions">
+  <!-- ⭐ เพิ่มปุ่มนี้ -->
+  <button class="btn btn-success btn-sm" onclick="ui.showAddAccountModal('${plan.id}')" title="Add Account to Pair">
+    <i class="fas fa-plus"></i>
+  </button>
+  
             <button class="btn btn-${plan.status === 'active' ? 'warning' : 'success'} btn-sm" onclick="ui.togglePlanStatus('${plan.id}')" title="${plan.status === 'active' ? 'Deactivate' : 'Activate'}">
               <i class="fas fa-${plan.status === 'active' ? 'pause' : 'play'}"></i>
             </button>
@@ -2196,9 +2481,7 @@ async loadData() {
       <tr>
         <td>
           <div class="pair-table-cell">
-            <div class="pair-table-master">
-              <i class="fas fa-user-crown" style="color: var(--warning-color);"></i>
-              <strong>${masterInfo}</strong>
+            <div class="pair-table-master"> <strong>${masterInfo}</strong>
               <span class="status-badge ${masterStatusClass}" style="margin-left: 8px; font-size: 0.7rem;">
                 <i class="fas fa-circle"></i>
                 ${masterStatus}
@@ -2207,9 +2490,7 @@ async loadData() {
             <div class="pair-table-arrow">
               <i class="fas fa-arrow-right" style="color: var(--primary-color);"></i>
             </div>
-            <div class="pair-table-slave">
-              <i class="fas fa-user" style="color: var(--info-color);"></i>
-              <strong>${slaveInfo}</strong>
+            <div class="pair-table-slave"> <strong>${slaveInfo}</strong>
               <span class="status-badge ${slaveStatusClass}" style="margin-left: 8px; font-size: 0.7rem;">
                 <i class="fas fa-circle"></i>
                 ${slaveStatus}
