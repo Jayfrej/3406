@@ -1,7 +1,7 @@
 """
 Copy Trading Handler
 รับและประมวลผลสัญญาณจาก Master EA
-Version: 2.1 - Fixed Copy TP/SL Toggle
+Version: 2.2 - Added Tick Value Auto-Mapping Support
 """
 
 import logging
@@ -21,7 +21,7 @@ class CopyHandler:
         from .balance_helper import BalanceHelper
         self.balance_helper = BalanceHelper(session_manager)
 
-        logger.info("[COPY_HANDLER] Initialized successfully (Order Tracking Enabled)")
+        logger.info("[COPY_HANDLER] Initialized successfully (Tick Value Support Enabled)")
     
     def process_master_signal(self, api_key: str, signal_data: Dict) -> Dict:
         """
@@ -31,7 +31,7 @@ class CopyHandler:
             api_key: API Key ของ Copy Pair
             signal_data: ข้อมูล Signal จาก Master {
                 'event': 'deal_add' | 'deal_close' | 'position_modify',
-                'order_id': 'order_12345',  # ✅ Unique Order ID
+                'order_id': 'order_12345',
                 'account': '111111',
                 'symbol': 'XAUUSD',
                 'type': 'BUY' | 'SELL',
@@ -59,48 +59,30 @@ class CopyHandler:
             # 3) ตรวจสอบว่าเป็น Master account จริงหรือไม่
             master_account = str(signal_data.get('account', ''))
             if master_account != pair.get('master_account'):
-                logger.warning(f"[COPY_HANDLER] Account mismatch: {master_account} != {pair.get('master_account')}")
-                return {'success': False, 'error': 'Account mismatch'}
+                logger.warning(
+                    f"[COPY_HANDLER] Account mismatch: "
+                    f"received {master_account}, expected {pair.get('master_account')}"
+                )
+                return {'success': False, 'error': 'Master account mismatch'}
             
-            # 4) แปลง Signal → Command
+            # 4) ตรวจสอบว่า Slave account มีอยู่และเชื่อมต่อแล้ว
+            slave_account = pair.get('slave_account')
+            if not self.balance_helper.session_manager.account_exists(slave_account):
+                logger.warning(f"[COPY_HANDLER] Slave account {slave_account} not found")
+                return {'success': False, 'error': 'Slave account not connected'}
+            
+            if not self.balance_helper.session_manager.is_instance_alive(slave_account):
+                logger.warning(f"[COPY_HANDLER] Slave account {slave_account} instance not alive")
+                return {'success': False, 'error': 'Slave account instance not running'}
+            
+            # 5) แปลง Signal เป็น Command
             slave_command = self._convert_signal_to_command(signal_data, pair)
             if not slave_command:
-                error_msg = "Cannot convert signal to command"
-                logger.warning(f"[COPY_HANDLER] {error_msg}")
-                try:
-                    self.copy_executor.copy_history.record_copy_event({
-                        'status': 'error',
-                        'master': master_account,
-                        'slave': pair['slave_account'],
-                        'action': str(signal_data.get('event', 'UNKNOWN')).upper(),
-                        'symbol': signal_data.get('symbol', '-'),
-                        'volume': signal_data.get('volume', ''),
-                        'message': f'❌ {error_msg}'
-                    })
-                except Exception:
-                    pass
-                return {'success': False, 'error': error_msg}
-            
-            # 5) ตรวจสอบว่า Slave online หรือไม่
-            slave_account = pair['slave_account']
-            if not self.balance_helper.session_manager.is_instance_alive(slave_account):
-                error_msg = f"Slave account {slave_account} is offline"
-                logger.warning(f"[COPY_HANDLER] {error_msg}")
-                try:
-                    self.copy_executor.copy_history.record_copy_event({
-                        'status': 'error',
-                        'master': master_account,
-                        'slave': pair['slave_account'],
-                        'action': str(signal_data.get('event', 'UNKNOWN')).upper(),
-                        'symbol': signal_data.get('symbol', '-'),
-                        'volume': signal_data.get('volume', ''),
-                        'message': f'❌ {error_msg}'
-                    })
-                except Exception:
-                    pass
-                return {'success': False, 'error': error_msg}
+                logger.warning("[COPY_HANDLER] Failed to convert signal to command")
+                return {'success': False, 'error': 'Signal conversion failed'}
             
             # 6) ส่งคำสั่งไปยัง Slave
+            logger.info(f"[COPY_HANDLER] Executing command on slave: {slave_account}")
             result = self.copy_executor.execute_on_slave(
                 slave_account=pair['slave_account'],
                 command=slave_command,
@@ -132,7 +114,9 @@ class CopyHandler:
         master_volume: float,
         settings: Dict,
         slave_account: str,
-        symbol: str
+        symbol: str,
+        master_account: str = None,
+        master_symbol: str = None
     ) -> float:
         """
         คำนวณ Volume สำหรับ Slave ตาม settings
@@ -141,12 +125,15 @@ class CopyHandler:
         - multiply: Master Volume × Multiplier
         - fixed: ใช้ค่าคงที่ (Multiplier)
         - percent: คำนวณจาก Risk % ของ Balance
+        - tick_value: ⭐ ปรับ Volume ตาม Tick Value ให้มูลค่าเท่ากัน (อัตโนมัติ)
         
         Args:
             master_volume: Volume จาก Master
             settings: การตั้งค่า Pair
             slave_account: หมายเลขบัญชี Slave
-            symbol: Symbol ที่จะเทรด
+            symbol: Symbol ที่จะเทรดบน Slave
+            master_account: หมายเลขบัญชี Master (สำหรับโหมด tick_value)
+            master_symbol: Symbol ต้นฉบับจาก Master (สำหรับโหมด tick_value)
             
         Returns:
             float: Volume ที่คำนวณแล้ว
@@ -155,7 +142,7 @@ class CopyHandler:
             volume_mode = settings.get('volume_mode') or settings.get('volumeMode', 'multiply')
             multiplier = float(settings.get('multiplier', 2))
             
-            # ตรวจสอบข้อมูล Symbol
+            # ตรวจสอบข้อมูล Symbol ของ Slave
             symbol_info = self.balance_helper.session_manager.get_symbol_info(slave_account, symbol)
             if not symbol_info:
                 logger.warning(f"[COPY_HANDLER] Cannot get symbol info for {symbol}, using master volume")
@@ -165,7 +152,49 @@ class CopyHandler:
             max_lot = float(symbol_info.get('volume_max', 100.0))
             lot_step = float(symbol_info.get('volume_step', 0.01))
             
-            # คำนวณ Volume ตาม Mode
+            # ⭐ AUTO-DETECT: ถ้าเปิด Auto Mapping Volume และมี master_account + master_symbol
+            # ให้ลองใช้ Tick Value แบบอัตโนมัติก่อน
+            if master_account and master_symbol:
+                # ดึงข้อมูล Symbol ของ Master และ Slave
+                master_symbol_info = self.balance_helper.session_manager.get_symbol_info(
+                    master_account, 
+                    master_symbol
+                )
+                
+                if master_symbol_info and symbol_info:
+                    # ดึง Tick Value (contract size)
+                    master_tick_value = float(master_symbol_info.get('trade_contract_size', 0))
+                    slave_tick_value = float(symbol_info.get('trade_contract_size', 0))
+                    
+                    # ⭐ ถ้าทั้งคู่มี tick value และไม่เท่ากัน → ใช้ Tick Value Mode อัตโนมัติ
+                    if master_tick_value > 0 and slave_tick_value > 0 and master_tick_value != slave_tick_value:
+                        tick_ratio = master_tick_value / slave_tick_value
+                        calculated_volume = master_volume * tick_ratio
+                        
+                        logger.info(
+                            f"[COPY_HANDLER] ⭐ AUTO TICK VALUE MODE:\n"
+                            f"  Master: {master_symbol} | Tick Value = {master_tick_value} | Volume = {master_volume}\n"
+                            f"  Slave: {symbol} | Tick Value = {slave_tick_value}\n"
+                            f"  Ratio = {tick_ratio:.4f} | Calculated Volume = {calculated_volume:.2f}\n"
+                            f"  Trade Value: Master = ${master_volume * master_tick_value:.2f} | "
+                            f"Slave = ${calculated_volume * slave_tick_value:.2f}"
+                        )
+                        
+                        # ตรวจสอบขอบเขตและปัดเศษ
+                        calculated_volume = self._adjust_volume(calculated_volume, min_lot, max_lot, lot_step)
+                        
+                        logger.info(
+                            f"[COPY_HANDLER] ✅ TICK VALUE AUTO-ADJUSTED: "
+                            f"{master_volume} → {calculated_volume} "
+                            f"(Equal Value: ${calculated_volume * slave_tick_value:.2f})"
+                        )
+                        
+                        return calculated_volume
+            
+            # ==========================================
+            # ถ้าไม่ได้ใช้ Tick Value อัตโนมัติ → ใช้โหมดปกติ
+            # ==========================================
+            
             if volume_mode == 'multiply':
                 # โหมด Multiply: Volume × Multiplier
                 calculated_volume = master_volume * multiplier
@@ -183,13 +212,7 @@ class CopyHandler:
                     logger.warning(f"[COPY_HANDLER] Cannot get balance for {slave_account}, using min lot")
                     return min_lot
                 
-                # คำนวณ Volume จาก Risk % (multiplier = risk %)
-                # สูตร: Volume = (Balance × Risk%) / (SL_Points × Point_Value)
-                # ถ้าไม่มี SL ให้ใช้ค่า default
                 risk_amount = balance * (multiplier / 100)
-                
-                # ประมาณ Volume จาก Risk Amount (simplified)
-                # ใช้ค่าประมาณ: 1 lot = $10/point สำหรับ Forex
                 point_value = 10  # ค่าประมาณ
                 calculated_volume = risk_amount / (point_value * 100)
                 
@@ -198,36 +221,88 @@ class CopyHandler:
                     f"Balance={balance} | Risk={multiplier}% | Volume={calculated_volume}"
                 )
             
+            elif volume_mode == 'tick_value':
+                # โหมด Tick Value แบบ Manual (ถ้าผู้ใช้เลือกเอง)
+                if not master_account or not master_symbol:
+                    logger.warning(
+                        f"[COPY_HANDLER] Tick Value mode requires master data, "
+                        f"falling back to multiply mode"
+                    )
+                    calculated_volume = master_volume * multiplier
+                else:
+                    master_symbol_info = self.balance_helper.session_manager.get_symbol_info(
+                        master_account, 
+                        master_symbol
+                    )
+                    
+                    if not master_symbol_info:
+                        logger.warning(
+                            f"[COPY_HANDLER] Cannot get master symbol info, "
+                            f"falling back to multiply mode"
+                        )
+                        calculated_volume = master_volume * multiplier
+                    else:
+                        master_tick_value = float(master_symbol_info.get('trade_contract_size', 1000))
+                        slave_tick_value = float(symbol_info.get('trade_contract_size', 100))
+                        
+                        tick_ratio = master_tick_value / slave_tick_value
+                        calculated_volume = master_volume * tick_ratio
+                        
+                        logger.info(
+                            f"[COPY_HANDLER] Manual Tick Value mode:\n"
+                            f"  Master Tick Value = {master_tick_value}\n"
+                            f"  Slave Tick Value = {slave_tick_value}\n"
+                            f"  Ratio = {tick_ratio} | Calculated Volume = {calculated_volume}"
+                        )
+            
             else:
                 logger.warning(f"[COPY_HANDLER] Unknown volume mode: {volume_mode}, using multiply")
                 calculated_volume = master_volume * multiplier
             
-            # ✅ ตรวจสอบขอบเขต
-            if calculated_volume < min_lot:
-                logger.warning(
-                    f"[COPY_HANDLER] Volume {calculated_volume} < min_lot {min_lot}, adjusted to {min_lot}"
-                )
-                calculated_volume = min_lot
-
-            if calculated_volume > max_lot:
-                logger.warning(
-                    f"[COPY_HANDLER] Volume {calculated_volume} > max_lot {max_lot}, adjusted to {max_lot}"
-                )
-                calculated_volume = max_lot
-
-            # ✅ ปัดเศษตาม lot_step
-            steps = round(calculated_volume / lot_step)
-            adjusted_volume = steps * lot_step
-
-            # ตรวจสอบอีกครั้งหลังปัดเศษ
-            if adjusted_volume < min_lot:
-                adjusted_volume = min_lot
-
-            return round(adjusted_volume, 2)
+            # ตรวจสอบขอบเขตและปัดเศษ
+            calculated_volume = self._adjust_volume(calculated_volume, min_lot, max_lot, lot_step)
+            
+            return calculated_volume
 
         except Exception as e:
             logger.error(f"[COPY_HANDLER] Error calculating volume: {e}")
             return max(master_volume, 0.01)
+    
+    def _adjust_volume(self, volume: float, min_lot: float, max_lot: float, lot_step: float) -> float:
+        """
+        ปรับ volume ให้อยู่ในขอบเขตที่ถูกต้อง
+        
+        Args:
+            volume: Volume ที่คำนวณได้
+            min_lot: Volume ต่ำสุด
+            max_lot: Volume สูงสุด
+            lot_step: ขั้นของ Volume
+            
+        Returns:
+            float: Volume ที่ปรับแล้ว
+        """
+        # ตรวจสอบขอบเขต
+        if volume < min_lot:
+            logger.warning(
+                f"[COPY_HANDLER] Volume {volume} < min_lot {min_lot}, adjusted to {min_lot}"
+            )
+            volume = min_lot
+
+        if volume > max_lot:
+            logger.warning(
+                f"[COPY_HANDLER] Volume {volume} > max_lot {max_lot}, adjusted to {max_lot}"
+            )
+            volume = max_lot
+
+        # ปัดเศษตาม lot_step
+        steps = round(volume / lot_step)
+        adjusted_volume = steps * lot_step
+
+        # ตรวจสอบอีกครั้งหลังปัดเศษ
+        if adjusted_volume < min_lot:
+            adjusted_volume = min_lot
+
+        return round(adjusted_volume, 2)
 
     # ======================
     #  Signal Conversion
@@ -236,9 +311,7 @@ class CopyHandler:
         """
         แปลงสัญญาณจาก Master เป็นคำสั่งสำหรับ Slave
         
-        ✅ รองรับ Order Tracking:
-        - ใช้ order_id เพื่อสร้าง Unique Comment
-        - Slave ค้นหา Order จาก Comment เพื่อปิด/แก้ไขแบบแยกอิสระ
+        ✅ รองรับ Order Tracking และ Tick Value Auto-Detection
         
         Args:
             signal_data: ข้อมูล Signal จาก Master
@@ -257,37 +330,38 @@ class CopyHandler:
             
             # ดึงข้อมูลพื้นฐาน
             event = str(signal_data.get('event', '')).lower()
-            symbol = str(signal_data.get('symbol', ''))
+            master_symbol = str(signal_data.get('symbol', ''))  # ⭐ เก็บ symbol ต้นฉบับ
             trade_type = str(signal_data.get('type', '')).upper()
             volume = float(signal_data.get('volume', 0))
             
-            # ✅ ดึง order_id จาก Master Signal (สำคัญมาก!)
+            # ✅ ดึง order_id จาก Master Signal
             order_id = signal_data.get('order_id', '')
             
             logger.info(
                 f"[COPY_HANDLER] Converting signal: "
-                f"event={event} | symbol={symbol} | type={trade_type} | "
+                f"event={event} | symbol={master_symbol} | type={trade_type} | "
                 f"volume={volume} | order_id={order_id}"
             )
             
             # ==================
             # 1. Map Symbol
             # ==================
+            slave_symbol = master_symbol  # Default
             if auto_map_symbol:
-                mapped_symbol = self.symbol_mapper.map_symbol(symbol)
+                mapped_symbol = self.symbol_mapper.map_symbol(master_symbol)
                 if not mapped_symbol:
                     logger.warning(
-                        f"[COPY_HANDLER] Cannot map symbol: {symbol}, using original"
+                        f"[COPY_HANDLER] Cannot map symbol: {master_symbol}, using original"
                     )
-                    mapped_symbol = symbol
+                    slave_symbol = master_symbol
                 else:
                     logger.info(
-                        f"[COPY_HANDLER] Symbol mapped: {symbol} → {mapped_symbol}"
+                        f"[COPY_HANDLER] Symbol mapped: {master_symbol} → {mapped_symbol}"
                     )
-                symbol = mapped_symbol
+                    slave_symbol = mapped_symbol
             
             # ==================
-            # 2. Map Volume
+            # 2. Map Volume (⭐ รองรับ Tick Value อัตโนมัติ)
             # ==================
             if auto_map_volume:
                 original_volume = volume
@@ -295,7 +369,9 @@ class CopyHandler:
                     master_volume=volume,
                     settings=settings,
                     slave_account=pair['slave_account'],
-                    symbol=symbol
+                    symbol=slave_symbol,  # ใช้ symbol ที่แปลงแล้ว
+                    master_account=pair['master_account'],  # ⭐ ส่ง master account
+                    master_symbol=master_symbol  # ⭐ ส่ง master symbol ต้นฉบับ
                 )
                 logger.info(
                     f"[COPY_HANDLER] Volume adjusted: {original_volume} → {volume}"
@@ -304,10 +380,7 @@ class CopyHandler:
             # ==================
             # 3. สร้าง Comment
             # ==================
-            # ✅ Comment Format: COPY_{order_id}
-            # ตัวอย่าง: COPY_order_12345
             copy_comment = f"COPY_{order_id}" if order_id else f"Copy from Master {pair['master_account']}"
-            
             logger.info(f"[COPY_HANDLER] Generated comment: {copy_comment}")
             
             # ==================
@@ -319,14 +392,13 @@ class CopyHandler:
                 logger.info(f"[COPY_HANDLER] Processing OPEN ORDER event")
                 
                 command = {
-                    'action': trade_type,  # BUY or SELL
-                    'symbol': symbol,
+                    'action': trade_type,
+                    'symbol': slave_symbol,
                     'volume': volume,
                     'order_type': 'market',
-                    'comment': copy_comment  # ✅ ใส่ Comment เพื่อ Track Order
+                    'comment': copy_comment
                 }
                 
-                # ✅ แก้ไข: เช็ค copy_psl ก่อนส่ง TP/SL
                 if copy_psl:
                     if signal_data.get('tp') is not None:
                         command['take_profit'] = float(signal_data['tp'])
@@ -336,13 +408,11 @@ class CopyHandler:
                         logger.info(f"[COPY_HANDLER] ✅ SL copied: {command['stop_loss']}")
                     logger.info(f"[COPY_HANDLER] Copy TP/SL is ENABLED")
                 else:
-                    # ✅ เพิ่ม: Log เมื่อปิด copyPSL
-                    logger.info(f"[COPY_HANDLER] ⚠️ Copy TP/SL is DISABLED - TP/SL will NOT be copied")
+                    logger.info(f"[COPY_HANDLER] ⚠️ Copy TP/SL is DISABLED")
                 
                 logger.info(
                     f"[COPY_HANDLER] ✅ OPEN Command created: "
-                    f"{trade_type} {symbol} {volume} lots | Comment: {copy_comment} | "
-                    f"TP: {command.get('take_profit', 'N/A')} | SL: {command.get('stop_loss', 'N/A')}"
+                    f"{trade_type} {slave_symbol} {volume} lots | Comment: {copy_comment}"
                 )
                 return command
             
@@ -351,47 +421,35 @@ class CopyHandler:
                 logger.info(f"[COPY_HANDLER] Processing CLOSE ORDER event")
                 
                 if order_id:
-                    # ✅ มี order_id → ปิดแบบแยกอิสระ (ใช้ Comment)
+                    # ⭐ ปิดด้วย Comment
                     command = {
-                        'action': 'CLOSE',
-                        'command_type': 'close_position',
-                        'comment': copy_comment,  # ✅ Slave EA จะค้นหา Order จาก Comment นี้
-                        'symbol': symbol,
-                        'volume': volume if auto_map_volume else None
+                        'action': 'close_by_comment',
+                        'comment': copy_comment,
+                        'symbol': slave_symbol
                     }
-                    logger.info(
-                        f"[COPY_HANDLER] ✅ CLOSE Command created (by Comment): "
-                        f"Comment: {copy_comment} | Symbol: {symbol}"
-                    )
+                    logger.info(f"[COPY_HANDLER] ✅ CLOSE Command created (by Comment): {copy_comment}")
                     return command
                 else:
-                    # ⚠️ ไม่มี order_id → Fallback: ปิดทั้งหมดของ Symbol
-                    logger.warning(
-                        f"[COPY_HANDLER] No order_id provided, "
-                        f"falling back to CLOSE_SYMBOL (will close ALL orders of {symbol})"
-                    )
+                    # Fallback: ปิดทั้งหมดของ Symbol
                     command = {
-                        'action': 'CLOSE_SYMBOL',
-                        'symbol': symbol,
-                        'volume': volume if auto_map_volume else None
+                        'action': 'close',
+                        'symbol': slave_symbol,
+                        'order_type': 'close'
                     }
-                    logger.info(
-                        f"[COPY_HANDLER] ⚠️ CLOSE_SYMBOL Command created: "
-                        f"Symbol: {symbol} (ALL orders will be closed)"
+                    logger.warning(
+                        f"[COPY_HANDLER] ⚠️ No order_id, using fallback CLOSE for symbol: {slave_symbol}"
                     )
                     return command
             
-            # --- EVENT: MODIFY TP/SL ---
-            elif event == 'position_modify':
-                logger.info(f"[COPY_HANDLER] Processing MODIFY TP/SL event")
+            # --- EVENT: MODIFY ORDER ---
+            elif event in ['position_modify', 'modify']:
+                logger.info(f"[COPY_HANDLER] Processing MODIFY ORDER event")
                 
                 if copy_psl and order_id:
-                    # ✅ มี order_id และเปิด copyPSL → แก้ไขแบบแยกอิสระ (ใช้ Comment)
                     command = {
-                        'action': 'MODIFY',
-                        'command_type': 'modify_position',
-                        'comment': copy_comment,  # ✅ Slave EA จะค้นหา Order จาก Comment นี้
-                        'symbol': symbol,
+                        'action': 'modify_position',
+                        'comment': copy_comment,
+                        'symbol': slave_symbol,
                         'take_profit': (
                             float(signal_data.get('tp', 0)) 
                             if signal_data.get('tp') is not None 
@@ -404,20 +462,16 @@ class CopyHandler:
                         )
                     }
                     logger.info(
-                        f"[COPY_HANDLER] ✅ MODIFY Command created (by Comment): "
+                        f"[COPY_HANDLER] ✅ MODIFY Command created: "
                         f"Comment: {copy_comment} | TP: {command.get('take_profit')} | "
                         f"SL: {command.get('stop_loss')}"
                     )
                     return command
                 else:
                     if not copy_psl:
-                        logger.info(
-                            f"[COPY_HANDLER] copyPSL is disabled, ignoring MODIFY event"
-                        )
+                        logger.info(f"[COPY_HANDLER] copyPSL is disabled, ignoring MODIFY event")
                     if not order_id:
-                        logger.warning(
-                            f"[COPY_HANDLER] No order_id provided, cannot modify specific order"
-                        )
+                        logger.warning(f"[COPY_HANDLER] No order_id provided, cannot modify")
                     return None
             
             # --- UNKNOWN EVENT ---
@@ -425,27 +479,16 @@ class CopyHandler:
             return None
             
         except Exception as e:
-            logger.error(
-                f"[COPY_HANDLER] ❌ Error converting signal: {e}", 
-                exc_info=True
-            )
+            logger.error(f"[COPY_HANDLER] ❌ Error converting signal: {e}", exc_info=True)
             return None
 
 
 # =================== Testing & Debugging ===================
 
 def test_copy_handler():
-    """
-    ฟังก์ชันทดสอบ CopyHandler
-    
-    Test Cases:
-    1. Open Order with order_id
-    2. Close Order with order_id
-    3. Modify Order with order_id
-    4. Fallback: Close without order_id
-    """
+    """ฟังก์ชันทดสอบ CopyHandler พร้อม Tick Value Support"""
     print("\n" + "="*80)
-    print("🧪 Testing CopyHandler - Order Tracking System")
+    print("🧪 Testing CopyHandler - Tick Value Auto-Detection")
     print("="*80)
     
     # Mock objects
@@ -467,7 +510,10 @@ def test_copy_handler():
     
     class MockSymbolMapper:
         def map_symbol(self, symbol):
-            return symbol  # No mapping
+            # Map USOIL → USOIL.cash
+            if symbol == 'USOIL':
+                return 'USOIL.cash'
+            return symbol
     
     class MockCopyExecutor:
         class MockCopyHistory:
@@ -486,6 +532,23 @@ def test_copy_handler():
             return True
         def is_instance_alive(self, account):
             return True
+        def get_symbol_info(self, account, symbol):
+            # Mock symbol info ตามภาพที่คุณส่งมา
+            if symbol == 'USOIL':
+                return {
+                    'volume_min': 0.01,
+                    'volume_max': 100.0,
+                    'volume_step': 0.01,
+                    'trade_contract_size': 1000.0  # ⭐ Crude Oil = 1000
+                }
+            elif symbol == 'USOIL.cash':
+                return {
+                    'volume_min': 0.01,
+                    'volume_max': 100.0,
+                    'volume_step': 0.01,
+                    'trade_contract_size': 100.0  # ⭐ WTI CFD = 100
+                }
+            return None
     
     # Initialize handler
     handler = CopyHandler(
@@ -495,64 +558,32 @@ def test_copy_handler():
         MockSessionManager()
     )
     
-    # Test Case 1: Open Order
-    print("\n📌 Test Case 1: OPEN ORDER with order_id")
+    # Test: Open Order with Tick Value Auto-Detection
+    print("\n📌 Test: OPEN ORDER - Tick Value Auto-Detection")
     print("-" * 80)
     signal_open = {
         'event': 'deal_add',
         'order_id': 'order_12345',
         'account': '111111',
-        'symbol': 'XAUUSD',
+        'symbol': 'USOIL',
         'type': 'BUY',
-        'volume': 1.0,
-        'tp': 2450.0,
-        'sl': 2400.0
+        'volume': 0.01,  # ⭐ Master ซื้อ 0.01 lot
+        'tp': 75.50,
+        'sl': 73.00
     }
+    
+    print("Master Signal:")
+    print(f"  Symbol: {signal_open['symbol']}")
+    print(f"  Volume: {signal_open['volume']} lot")
+    print(f"  Tick Value: 1000")
+    print(f"  Trade Value: ${signal_open['volume'] * 1000}")
+    print()
+    
     result = handler.process_master_signal('test_key', signal_open)
-    print(f"Result: {result}")
-    
-    # Test Case 2: Close Order
-    print("\n📌 Test Case 2: CLOSE ORDER with order_id")
-    print("-" * 80)
-    signal_close = {
-        'event': 'deal_close',
-        'order_id': 'order_12345',
-        'account': '111111',
-        'symbol': 'XAUUSD',
-        'volume': 1.0
-    }
-    result = handler.process_master_signal('test_key', signal_close)
-    print(f"Result: {result}")
-    
-    # Test Case 3: Modify Order
-    print("\n📌 Test Case 3: MODIFY ORDER with order_id")
-    print("-" * 80)
-    signal_modify = {
-        'event': 'position_modify',
-        'order_id': 'order_12345',
-        'account': '111111',
-        'symbol': 'XAUUSD',
-        'tp': 2460.0,
-        'sl': 2410.0
-    }
-    result = handler.process_master_signal('test_key', signal_modify)
-    print(f"Result: {result}")
-    
-    # Test Case 4: Fallback - Close without order_id
-    print("\n📌 Test Case 4: FALLBACK - CLOSE without order_id")
-    print("-" * 80)
-    signal_close_fallback = {
-        'event': 'deal_close',
-        'account': '111111',
-        'symbol': 'XAUUSD',
-        'volume': 1.0
-        # ❌ No order_id
-    }
-    result = handler.process_master_signal('test_key', signal_close_fallback)
-    print(f"Result: {result}")
+    print(f"\nResult: {result}")
     
     print("\n" + "="*80)
-    print("✅ All tests completed!")
+    print("✅ Tick Value Test Completed!")
     print("="*80 + "\n")
 
 
