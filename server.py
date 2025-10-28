@@ -509,8 +509,22 @@ def webhook_health():
 # =================== webhook handler (เช็ค allowlist) ===================
 
 @app.post('/webhook/<token>')
-@limiter.limit("10 per minute")
 def webhook_handler(token):
+    # เช็ค rate limit แบบ dynamic
+    client_ip = request.remote_addr
+    rate_key = f"webhook:{client_ip}"
+    webhook_limit = get_webhook_rate_limit()
+    
+    if not check_custom_rate_limit(rate_key, webhook_limit):
+        logger.warning(f"[WEBHOOK] Rate limit exceeded from {client_ip}")
+        add_system_log('warning', f' [429] Webhook rate limit exceeded - IP: {client_ip}, Limit: {webhook_limit}') 
+        return jsonify({
+            'error': 'Too many requests',
+            'limit': webhook_limit,
+            'retry_after': '60 seconds'
+        }), 429
+
+
     if token != WEBHOOK_TOKEN:
         logger.warning("[UNAUTHORIZED] invalid webhook token")
         add_system_log('error', ' [401] Webhook unauthorized - Invalid token')
@@ -1568,6 +1582,76 @@ def sse_copy_trades():
 
 # Global settings storage (ใช้ไฟล์ JSON ทน database)
 SETTINGS_FILE = 'data/settings.json'
+# ===== Custom Rate Limiter (ไม่ต้อง Restart Server) =====
+rate_limit_store = {}
+
+def check_custom_rate_limit(key: str, limit_str: str) -> bool:
+    """
+    เช็ค rate limit แบบ manual
+    Args:
+        key: identifier (เช่น "webhook:127.0.0.1")
+        limit_str: "10 per minute", "100 per hour", "1000 per day"
+    Returns:
+        True = allowed, False = exceeded
+    """
+    try:
+        parts = limit_str.lower().split()
+        if len(parts) != 3 or parts[1] != 'per':
+            logger.warning(f"[RATE_LIMIT] Invalid format: {limit_str}")
+            return True  # fail-open
+        
+        max_requests = int(parts[0])
+        period = parts[2]
+        
+        period_seconds = {
+            'minute': 60,
+            'hour': 3600,
+            'day': 86400
+        }.get(period, 60)
+        
+        now = time.time()
+        
+        if key not in rate_limit_store:
+            rate_limit_store[key] = []
+        
+        # ลบ timestamps ที่หมดอายุ
+        rate_limit_store[key] = [
+            ts for ts in rate_limit_store[key] 
+            if now - ts < period_seconds
+        ]
+        
+        # เช็คว่าเกิน limit หรือไม่
+        if len(rate_limit_store[key]) >= max_requests:
+            logger.warning(
+                f"[RATE_LIMIT] Exceeded {key}: "
+                f"{len(rate_limit_store[key])}/{max_requests} in {limit_str}"
+            )
+            return False
+        
+        rate_limit_store[key].append(now)
+        return True
+        
+    except Exception as e:
+        logger.error(f"[RATE_LIMIT] Error: {e}")
+        return True  # fail-open
+
+
+def get_webhook_rate_limit() -> str:
+    """ดึงค่า webhook rate limit จาก settings"""
+    try:
+        settings = load_settings()
+        return settings.get('rate_limits', {}).get('webhook', '10 per minute')
+    except Exception:
+        return '10 per minute'
+
+
+def get_api_rate_limit() -> str:
+    """ดึงค่า API rate limit จาก settings"""
+    try:
+        settings = load_settings()
+        return settings.get('rate_limits', {}).get('api', '100 per hour')
+    except Exception:
+        return '100 per hour'
 
 
 def load_settings():
@@ -1660,8 +1744,15 @@ def save_rate_limit_settings():
         if save_settings(settings):
             logger.info(f"[SETTINGS] Rate limits updated: webhook={webhook_limit}, api={api_limit}")
             add_system_log('info', f' [200] Rate limits updated - Webhook: {webhook_limit}, API: {api_limit}')
+            
+            # ล้าง rate limit store เพื่อให้ค่าใหม่มีผลทันที
+            global rate_limit_store
+            rate_limit_store.clear()
+            logger.info("[RATE_LIMIT] Rate limit store cleared - new limits active immediately")
+            
             return jsonify({
                 'success': True,
+                'message': 'Rate limit settings saved! Changes are active immediately (no restart needed)',
                 'rate_limits': settings['rate_limits']
             }), 200
         else:
