@@ -2720,3 +2720,168 @@ html[data-theme="light"] .smtp-info-item code {
 }
 
 /* ========================================== */
+
+
+/* ====== PATCH: Remove blue user icon for Slave everywhere ====== */
+/* Pair card header: right column (Slave) */
+.copy-pair-card .pair-content > :nth-child(3) i[class*="fa-user"] { display: none !important; }
+/* If a pseudo-element is used for the icon */
+.copy-pair-card .pair-content > :nth-child(3) .slave-name::before,
+.copy-pair-card .pair-header .slave-name::before,
+.copy-pair-card .pair-content > :nth-child(3) .slave::before,
+.copy-pair-card .pair-header .slave::before {
+  content: none !important; display: none !important;
+}
+
+/* Table layout: hide user icon in Slave column */
+.pair-table-slave i[class*="fa-user"] { display: none !important; }
+
+/* Plan / modal chips: hide user icon for Slave account badge */
+.plan-item-account.slave i[class*="fa-user"] { display: none !important; }
+
+/* Fallback: any FontAwesome user icon inside a copy pair card */
+.copy-pair-card i.fas.fa-user,
+.copy-pair-card i.fa-solid.fa-user,
+.copy-pair-card i.fa.fa-user {
+  display: none !important;
+}
+/* ====== END PATCH ====== */
+
+/* === Balanced actions for Add Master modal (added by ChatGPT) === */
+.modal-body .form-group {
+  /* Add breathing room between the select and the buttons */
+  margin-bottom: 12px;
+}
+
+.modal-actions {
+  /* Make action buttons symmetric and not cramped */
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 4px;
+}
+
+.modal-actions .btn {
+  /* Ensure equal-width buttons and centered labels */
+  width: 100%;
+  justify-content: center;
+}
+
+@media (max-width: 480px) {
+  /* On very small screens, stack buttons vertically */
+  .modal-actions { grid-template-columns: 1fr; }
+}
+
+/* === System Info Endpoint Row — improved layout (added by ChatGPT) === */
+.system-info { gap: 12px; }
+
+.system-info .info-item {
+  /* Turn the row into a neat 3‑column grid: Label | Value | Copy */
+  display: grid;
+  grid-template-columns: max-content 1fr max-content;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.system-info .info-item strong {
+  min-width: 180px;               /* keep label width stable */
+}
+
+.system-info .info-item code {
+  background: #0a0f16;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+  width: 100%;                     /* stretch to take remaining space */
+  max-width: 100%;
+  white-space: nowrap;             /* single line */
+  overflow: hidden;                /* hide overflow */
+  text-overflow: ellipsis;         /* show ellipsis for long URLs */
+  display: block;
+}
+
+html[data-theme="light"] .system-info .info-item code {
+  background: #cbd5e1;
+  color: #1e293b;
+  border-color: rgba(0,0,0,.2);
+}
+
+.system-info .info-item .btn-copy {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+@media (max-width: 640px) {
+  .system-info .info-item {
+    grid-template-columns: 1fr;  /* stack vertically on small screens */
+    gap: 8px;
+  }
+  .system-info .info-item strong {
+    min-width: 0;
+  }
+  .system-info .info-item .btn-copy {
+    justify-self: start;
+  }
+}
+
+/* === Server Status badge — don't stretch; keep as compact chip === */
+.system-info .info-item .status-badge,
+#serverStatusSystem {
+  justify-self: start;   /* stop grid from stretching it */
+  width: auto;           /* ensure width fits content */
+  max-width: max-content;
+}
+
+/* === Fix: Server Status row should keep badge next to label (flex-start) === */
+.system-info .info-item:first-child {
+  justify-content: flex-start;  /* label + chip sit together on the left */
+  gap: 12px;
+}
+.system-info .info-item:first-child .status-badge {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: max-content;
+}
+
+/* === Server Status row: use 2 columns (Label | Chip) and keep them together */
+.system-info .info-item:first-child {
+  display: grid !important;
+  grid-template-columns: max-content max-content !important; /* remove the 1fr spacer */
+  align-items: center;
+  gap: 10px; /* tight spacing */
+}
+
+.system-info .info-item:first-child .status-badge,
+.system-info .info-item:first-child #serverStatusSystem {
+  width: auto !important;
+  max-width: max-content !important;
+  justify-self: start !important;
+}
+
+/* === Server Status row: place chip on the FAR RIGHT === */
+.system-info .info-item:first-child {
+  display: grid !important;
+  grid-template-columns: max-content 1fr max-content !important; /* label | spacer | chip */
+  align-items: center;
+  gap: 10px;
+  justify-content: normal !important;
+  justify-items: stretch;
+}
+
+.system-info .info-item:first-child .status-badge,
+.system-info .info-item:first-child #serverStatusSystem {
+  width: auto !important;
+  max-width: max-content !important;
+  justify-self: end !important;   /* push chip to the right edge */
+}
