@@ -260,8 +260,10 @@ class CopyHandler:
                 calculated_volume = master_volume * multiplier
             
             # ตรวจสอบขอบเขตและปัดเศษ
-            # ⭐ ดึง strategy สำหรับจัดการ Volume น้อยเกินไป
-            min_volume_strategy = settings.get('min_volume_strategy', 'round_up')  # round_up, skip, warn
+            # ⭐ ดึง strategy (Default = 'warn' - แจ้งเตือนแต่ยังเทรด)
+            min_volume_strategy = settings.get('min_volume_strategy', 'warn')
+            
+            # เฉพาะ 'skip' เท่านั้นที่จะข้ามการเทรด
             skip_if_too_small = (min_volume_strategy == 'skip')
             
             calculated_volume = self._adjust_volume(
@@ -272,16 +274,16 @@ class CopyHandler:
                 skip_if_too_small=skip_if_too_small
             )
             
-            # ⭐ ถ้าได้ 0 = ต้อง skip trade นี้
+            # ⭐ ถ้าได้ 0 = strategy เป็น 'skip' และ volume น้อยเกินไป
             if calculated_volume == 0:
                 logger.warning(
-                    f"[COPY_HANDLER] ❌ Trade SKIPPED: Volume too small to maintain risk ratio\n"
+                    f"[COPY_HANDLER] ❌ Trade SKIPPED (strategy='skip'): Volume too small\n"
                     f"  Master volume: {master_volume}\n"
                     f"  Calculated volume: {master_volume * tick_ratio if master_account and master_symbol else master_volume * multiplier:.5f}\n"
                     f"  Min lot: {min_lot}\n"
-                    f"  Recommendation: Increase Master volume or change strategy to 'round_up'"
+                    f"  💡 Change strategy to 'warn' to trade with min_lot instead"
                 )
-                return 0  # ⭐ คืน 0 = ไม่ทำการเทรด
+                return 0
             
             return calculated_volume
 
@@ -322,30 +324,35 @@ class CopyHandler:
             # คำนวณ % ที่ต่างจาก Min Lot
             percentage_diff = ((min_lot - volume) / min_lot) * 100
             
-            # ⭐ Strategy 1: ถ้าต่างกันมากกว่า 90% = Volume น้อยมากๆ
+            # ⭐ แจ้งเตือนตามระดับความแตกต่าง
             if percentage_diff > 90:
+                # ⚠️ CRITICAL: ต่างกันมากกว่า 90%
                 logger.error(
-                    f"[COPY_HANDLER] ⚠️ CRITICAL: Volume {volume:.5f} is {percentage_diff:.1f}% less than min_lot {min_lot}!\n"
-                    f"  This means the calculated volume is extremely small.\n"
-                    f"  Original volume would risk MUCH LESS than intended."
+                    f"[COPY_HANDLER] ⚠️ CRITICAL WARNING: Volume {volume:.5f} is {percentage_diff:.1f}% less than min_lot {min_lot}!\n"
+                    f"  Calculated volume is EXTREMELY small.\n"
+                    f"  Trade value will be {(min_lot/volume):.1f}x HIGHER than Master!\n"
+                    f"  Master will risk: ${volume * 10000:.2f} (example)\n"
+                    f"  Slave will risk: ${min_lot * 10000:.2f} (example)\n"
+                    f"  ⚠️ Proceeding with min_lot {min_lot} anyway..."
                 )
                 
+                # ✅ แม้จะต่างกันมาก แต่ถ้าไม่ได้เลือก skip ก็ยังเทรดต่อ
                 if skip_if_too_small:
                     logger.warning(
-                        f"[COPY_HANDLER] ❌ SKIPPING TRADE: Volume too small to maintain risk ratio"
+                        f"[COPY_HANDLER] ❌ SKIPPING TRADE: Volume too small (strategy='skip')"
                     )
-                    return 0  # ⭐ คืน 0 = ไม่เทรด
+                    return 0  # เฉพาะเมื่อเลือก skip เท่านั้น
                 
-            # ⭐ Strategy 2: ต่างกัน 50-90% = แจ้งเตือนแต่ยังเทรดได้
             elif percentage_diff > 50:
+                # ⚠️ WARNING: ต่างกัน 50-90%
                 logger.warning(
                     f"[COPY_HANDLER] ⚠️ WARNING: Volume {volume:.5f} is {percentage_diff:.1f}% less than min_lot {min_lot}\n"
-                    f"  Trade value will be MUCH HIGHER than intended.\n"
-                    f"  Adjusted to min_lot {min_lot}"
+                    f"  Trade value will be {(min_lot/volume):.1f}x HIGHER than Master.\n"
+                    f"  Adjusted to min_lot {min_lot} and proceeding..."
                 )
             
-            # ⭐ Strategy 3: ต่างกันน้อยกว่า 50% = ปรับตามปกติ
             else:
+                # ℹ️ INFO: ต่างกันน้อยกว่า 50%
                 logger.info(
                     f"[COPY_HANDLER] Volume {volume:.5f} < min_lot {min_lot}, adjusted to {min_lot}"
                 )
