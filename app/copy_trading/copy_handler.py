@@ -260,7 +260,28 @@ class CopyHandler:
                 calculated_volume = master_volume * multiplier
             
             # ตรวจสอบขอบเขตและปัดเศษ
-            calculated_volume = self._adjust_volume(calculated_volume, min_lot, max_lot, lot_step)
+            # ⭐ ดึง strategy สำหรับจัดการ Volume น้อยเกินไป
+            min_volume_strategy = settings.get('min_volume_strategy', 'round_up')  # round_up, skip, warn
+            skip_if_too_small = (min_volume_strategy == 'skip')
+            
+            calculated_volume = self._adjust_volume(
+                calculated_volume, 
+                min_lot, 
+                max_lot, 
+                lot_step,
+                skip_if_too_small=skip_if_too_small
+            )
+            
+            # ⭐ ถ้าได้ 0 = ต้อง skip trade นี้
+            if calculated_volume == 0:
+                logger.warning(
+                    f"[COPY_HANDLER] ❌ Trade SKIPPED: Volume too small to maintain risk ratio\n"
+                    f"  Master volume: {master_volume}\n"
+                    f"  Calculated volume: {master_volume * tick_ratio if master_account and master_symbol else master_volume * multiplier:.5f}\n"
+                    f"  Min lot: {min_lot}\n"
+                    f"  Recommendation: Increase Master volume or change strategy to 'round_up'"
+                )
+                return 0  # ⭐ คืน 0 = ไม่ทำการเทรด
             
             return calculated_volume
 
@@ -268,26 +289,70 @@ class CopyHandler:
             logger.error(f"[COPY_HANDLER] Error calculating volume: {e}")
             return max(master_volume, 0.01)
     
-    def _adjust_volume(self, volume: float, min_lot: float, max_lot: float, lot_step: float) -> float:
+    def _adjust_volume(
+        self, 
+        volume: float, 
+        min_lot: float, 
+        max_lot: float, 
+        lot_step: float,
+        skip_if_too_small: bool = False  # ⭐ NEW: Option to skip trade
+    ) -> float:
         """
         ปรับ volume ให้อยู่ในขอบเขตที่ถูกต้อง
+        
+        ⭐ NEW: รองรับ 3 Strategies เมื่อ Volume น้อยเกินไป:
+        1. Round Up to Min Lot (Default)
+        2. Skip Trade (ถ้า skip_if_too_small = True)
+        3. Warning + Use Min Lot
         
         Args:
             volume: Volume ที่คำนวณได้
             min_lot: Volume ต่ำสุด
             max_lot: Volume สูงสุด
             lot_step: ขั้นของ Volume
+            skip_if_too_small: ถ้า True จะคืน 0 เมื่อ volume น้อยเกินไป
             
         Returns:
-            float: Volume ที่ปรับแล้ว
+            float: Volume ที่ปรับแล้ว (หรือ 0 ถ้าต้องการ skip)
         """
-        # ตรวจสอบขอบเขต
+        original_volume = volume
+        
+        # ตรวจสอบว่า Volume น้อยกว่า Min Lot มากหรือไม่
         if volume < min_lot:
-            logger.warning(
-                f"[COPY_HANDLER] Volume {volume} < min_lot {min_lot}, adjusted to {min_lot}"
-            )
+            # คำนวณ % ที่ต่างจาก Min Lot
+            percentage_diff = ((min_lot - volume) / min_lot) * 100
+            
+            # ⭐ Strategy 1: ถ้าต่างกันมากกว่า 90% = Volume น้อยมากๆ
+            if percentage_diff > 90:
+                logger.error(
+                    f"[COPY_HANDLER] ⚠️ CRITICAL: Volume {volume:.5f} is {percentage_diff:.1f}% less than min_lot {min_lot}!\n"
+                    f"  This means the calculated volume is extremely small.\n"
+                    f"  Original volume would risk MUCH LESS than intended."
+                )
+                
+                if skip_if_too_small:
+                    logger.warning(
+                        f"[COPY_HANDLER] ❌ SKIPPING TRADE: Volume too small to maintain risk ratio"
+                    )
+                    return 0  # ⭐ คืน 0 = ไม่เทรด
+                
+            # ⭐ Strategy 2: ต่างกัน 50-90% = แจ้งเตือนแต่ยังเทรดได้
+            elif percentage_diff > 50:
+                logger.warning(
+                    f"[COPY_HANDLER] ⚠️ WARNING: Volume {volume:.5f} is {percentage_diff:.1f}% less than min_lot {min_lot}\n"
+                    f"  Trade value will be MUCH HIGHER than intended.\n"
+                    f"  Adjusted to min_lot {min_lot}"
+                )
+            
+            # ⭐ Strategy 3: ต่างกันน้อยกว่า 50% = ปรับตามปกติ
+            else:
+                logger.info(
+                    f"[COPY_HANDLER] Volume {volume:.5f} < min_lot {min_lot}, adjusted to {min_lot}"
+                )
+            
             volume = min_lot
 
+        # ตรวจสอบ Max Lot
         if volume > max_lot:
             logger.warning(
                 f"[COPY_HANDLER] Volume {volume} > max_lot {max_lot}, adjusted to {max_lot}"
@@ -301,6 +366,14 @@ class CopyHandler:
         # ตรวจสอบอีกครั้งหลังปัดเศษ
         if adjusted_volume < min_lot:
             adjusted_volume = min_lot
+            
+        # ⭐ Log สรุป
+        if abs(adjusted_volume - original_volume) > 0.001:
+            ratio_change = (adjusted_volume / original_volume) if original_volume > 0 else 0
+            logger.info(
+                f"[COPY_HANDLER] Volume adjustment: {original_volume:.5f} → {adjusted_volume:.5f} "
+                f"(×{ratio_change:.2f} = {ratio_change*100:.0f}% of original)"
+            )
 
         return round(adjusted_volume, 2)
 
