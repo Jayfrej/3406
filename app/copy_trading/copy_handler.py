@@ -1,7 +1,21 @@
 """
 Copy Trading Handler
 รับและประมวลผลสัญญาณจาก Master EA
-Version: 2.2 - Added Tick Value Auto-Mapping Support + Email Alerts
+Version: 3.0 - Tick Value Auto-Detection (Multiply Mode Only)
+
+🔥 การทำงาน:
+- Auto Mapping Volume = ON + Volume Mode = Multiply
+  → ตรวจสอบ Tick Value อัตโนมัติ
+  → ถ้า Tick Value ต่างกัน = ปรับ Volume ให้มูลค่าเท่ากัน
+  → ถ้า Tick Value เท่ากัน = ใช้ Multiply ปกติ (Master × Multiplier)
+
+- Volume Mode = Fixed/Percent
+  → ไม่ได้รับผลจาก Auto Mapping Volume
+  → คำนวณตามโหมดที่เลือก
+  
+- Auto Mapping Volume = OFF
+  → ไม่ตรวจสอบ Tick Value
+  → ใช้ Volume Mode ที่เลือกตามปกติ
 """
 
 import logging
@@ -23,7 +37,7 @@ class CopyHandler:
         from .balance_helper import BalanceHelper
         self.balance_helper = BalanceHelper(session_manager)
 
-        logger.info("[COPY_HANDLER] Initialized successfully (Tick Value Support + Email Alerts Enabled)")
+        logger.info("[COPY_HANDLER] Initialized (v3.0 - Tick Value Auto-Detection Enabled by Default)")
     
     def process_master_signal(self, api_key: str, signal_data: Dict) -> Dict:
         """
@@ -123,19 +137,26 @@ class CopyHandler:
         """
         คำนวณ Volume สำหรับ Slave ตาม settings
         
+        🔥 TICK VALUE AUTO-DETECTION (เฉพาะ Multiply Mode):
+        - เมื่อ Auto Mapping Volume = ON + Volume Mode = Multiply
+          → ตรวจสอบ Tick Value อัตโนมัติ
+          → ถ้า Tick Value ต่างกัน = ปรับ Volume ให้มูลค่าเท่ากัน
+          → ถ้า Tick Value เท่ากัน = ใช้ Multiply ปกติ
+        
+        - Volume Mode = Fixed/Percent → ไม่ได้รับผลจาก Auto Mapping Volume
+        
         Volume Modes:
-        - multiply: Master Volume × Multiplier
-        - fixed: ใช้ค่าคงที่ (Multiplier)
-        - percent: คำนวณจาก Risk % ของ Balance
-        - tick_value: ⭐ ปรับ Volume ตาม Tick Value ให้มูลค่าเท่ากัน (อัตโนมัติ)
+        - multiply: Master Volume × Multiplier (รองรับ Tick Value Auto)
+        - fixed: ใช้ค่าคงที่ (ไม่เกี่ยวกับ Auto Mapping Volume)
+        - percent: คำนวณจาก % ของ Balance (ไม่เกี่ยวกับ Auto Mapping Volume)
         
         Args:
             master_volume: Volume จาก Master
             settings: การตั้งค่า Pair
             slave_account: หมายเลขบัญชี Slave
             symbol: Symbol ที่จะเทรดบน Slave
-            master_account: หมายเลขบัญชี Master (สำหรับโหมด tick_value)
-            master_symbol: Symbol ต้นฉบับจาก Master (สำหรับโหมด tick_value)
+            master_account: หมายเลขบัญชี Master
+            master_symbol: Symbol ต้นฉบับจาก Master
             
         Returns:
             float: Volume ที่คำนวณแล้ว
@@ -143,6 +164,7 @@ class CopyHandler:
         try:
             volume_mode = settings.get('volume_mode') or settings.get('volumeMode', 'multiply')
             multiplier = float(settings.get('multiplier', 2))
+            auto_map_volume = settings.get('auto_map_volume', True)
             
             # ตรวจสอบข้อมูล Symbol ของ Slave
             symbol_info = self.balance_helper.session_manager.get_symbol_info(slave_account, symbol)
@@ -154,9 +176,15 @@ class CopyHandler:
             max_lot = float(symbol_info.get('volume_max', 100.0))
             lot_step = float(symbol_info.get('volume_step', 0.01))
             
-            # ⭐ AUTO-DETECT: ถ้าเปิด Auto Mapping Volume และมี master_account + master_symbol
-            # ให้ลองใช้ Tick Value แบบอัตโนมัติก่อน
-            if master_account and master_symbol:
+            # 🔥 TICK VALUE AUTO-DETECTION
+            # เงื่อนไข: Auto Mapping Volume = ON + Volume Mode = Multiply + มีข้อมูล Master/Slave
+            if (auto_map_volume and 
+                volume_mode == 'multiply' and 
+                master_account and 
+                master_symbol):
+                
+                logger.info("[COPY_HANDLER] 🔥 Tick Value Auto-Detection enabled (Auto Mapping Volume = ON + Multiply Mode)")
+                
                 # ดึงข้อมูล Symbol ของ Master และ Slave
                 master_symbol_info = self.balance_helper.session_manager.get_symbol_info(
                     master_account, 
@@ -168,13 +196,14 @@ class CopyHandler:
                     master_tick_value = float(master_symbol_info.get('trade_contract_size', 0))
                     slave_tick_value = float(symbol_info.get('trade_contract_size', 0))
                     
-                    # ⭐ ถ้าทั้งคู่มี tick value และไม่เท่ากัน → ใช้ Tick Value Mode อัตโนมัติ
+                    # ตรวจสอบว่า Tick Value ต่างกันหรือไม่
                     if master_tick_value > 0 and slave_tick_value > 0 and master_tick_value != slave_tick_value:
+                        # ✅ Tick Value ต่างกัน → ปรับ Volume ให้มูลค่าเท่ากัน
                         tick_ratio = master_tick_value / slave_tick_value
                         calculated_volume = master_volume * tick_ratio
                         
                         logger.info(
-                            f"[COPY_HANDLER] ⭐ AUTO TICK VALUE MODE:\n"
+                            f"[COPY_HANDLER] ✅ TICK VALUE DETECTED (Different):\n"
                             f"  Master: {master_symbol} | Tick Value = {master_tick_value} | Volume = {master_volume}\n"
                             f"  Slave: {symbol} | Tick Value = {slave_tick_value}\n"
                             f"  Ratio = {tick_ratio:.4f} | Calculated Volume = {calculated_volume:.2f}\n"
@@ -186,16 +215,34 @@ class CopyHandler:
                         calculated_volume = self._adjust_volume(calculated_volume, min_lot, max_lot, lot_step)
                         
                         logger.info(
-                            f"[COPY_HANDLER] ✅ TICK VALUE AUTO-ADJUSTED: "
+                            f"[COPY_HANDLER] 🎯 TICK VALUE AUTO-ADJUSTED: "
                             f"{master_volume} → {calculated_volume} "
                             f"(Equal Value: ${calculated_volume * slave_tick_value:.2f})"
                         )
                         
                         return calculated_volume
+                    
+                    elif master_tick_value == slave_tick_value and master_tick_value > 0:
+                        # ℹ️ Tick Value เท่ากัน → ใช้ Multiply ปกติ
+                        logger.info(
+                            f"[COPY_HANDLER] ℹ️ Tick Values are EQUAL ({master_tick_value}), "
+                            f"using standard Multiply: {master_volume} × {multiplier}"
+                        )
+                    else:
+                        # ⚠️ ไม่มีข้อมูล Tick Value → ใช้ Multiply ปกติ
+                        logger.info(
+                            f"[COPY_HANDLER] ⚠️ Tick Value data incomplete, "
+                            f"using standard Multiply: {master_volume} × {multiplier}"
+                        )
             
-            # ==========================================
-            # ถ้าไม่ได้ใช้ Tick Value อัตโนมัติ → ใช้โหมดปกติ
-            # ==========================================
+            # 📌 STANDARD VOLUME MODES
+            # ใช้เมื่อ:
+            # 1. Auto Mapping Volume = OFF หรือ
+            # 2. Volume Mode = Fixed/Percent (ไม่เกี่ยวกับ Auto Mapping Volume) หรือ
+            # 3. Volume Mode = Multiply + Tick Values เท่ากัน หรือ
+            # 4. ไม่มีข้อมูล Master/Slave Symbol
+            
+            logger.info(f"[COPY_HANDLER] 📌 Using Volume Mode: {volume_mode}")
             
             if volume_mode == 'multiply':
                 # โหมด Multiply: Volume × Multiplier
@@ -223,42 +270,9 @@ class CopyHandler:
                     f"Balance={balance} | Risk={multiplier}% | Volume={calculated_volume}"
                 )
             
-            elif volume_mode == 'tick_value':
-                # โหมด Tick Value แบบ Manual (ถ้าผู้ใช้เลือกเอง)
-                if not master_account or not master_symbol:
-                    logger.warning(
-                        f"[COPY_HANDLER] Tick Value mode requires master data, "
-                        f"falling back to multiply mode"
-                    )
-                    calculated_volume = master_volume * multiplier
-                else:
-                    master_symbol_info = self.balance_helper.session_manager.get_symbol_info(
-                        master_account, 
-                        master_symbol
-                    )
-                    
-                    if not master_symbol_info:
-                        logger.warning(
-                            f"[COPY_HANDLER] Cannot get master symbol info, "
-                            f"falling back to multiply mode"
-                        )
-                        calculated_volume = master_volume * multiplier
-                    else:
-                        master_tick_value = float(master_symbol_info.get('trade_contract_size', 1000))
-                        slave_tick_value = float(symbol_info.get('trade_contract_size', 100))
-                        
-                        tick_ratio = master_tick_value / slave_tick_value
-                        calculated_volume = master_volume * tick_ratio
-                        
-                        logger.info(
-                            f"[COPY_HANDLER] Manual Tick Value mode:\n"
-                            f"  Master Tick Value = {master_tick_value}\n"
-                            f"  Slave Tick Value = {slave_tick_value}\n"
-                            f"  Ratio = {tick_ratio} | Calculated Volume = {calculated_volume}"
-                        )
-            
             else:
-                logger.warning(f"[COPY_HANDLER] Unknown volume mode: {volume_mode}, using multiply")
+                # โหมดที่ไม่รู้จัก → ใช้ multiply mode
+                logger.warning(f"[COPY_HANDLER] Unknown volume mode: {volume_mode}, using multiply mode")
                 calculated_volume = master_volume * multiplier
             
             # ตรวจสอบขอบเขตและปัดเศษ
