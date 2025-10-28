@@ -1,27 +1,29 @@
 """
 Copy Trading Handler
 รับและประมวลผลสัญญาณจาก Master EA
-Version: 2.2 - Added Tick Value Auto-Mapping Support
+Version: 2.2 - Added Tick Value Auto-Mapping Support + Email Alerts
 """
 
 import logging
 from typing import Dict, Optional
+from datetime import datetime  # ⭐ เพิ่มสำหรับ timestamp ในอีเมล์
 
 logger = logging.getLogger(__name__)
 
 class CopyHandler:
     """จัดการการรับและประมวลผลสัญญาณจาก Master"""
     
-    def __init__(self, copy_manager, symbol_mapper, copy_executor, session_manager):
+    def __init__(self, copy_manager, symbol_mapper, copy_executor, session_manager, email_handler=None):
         self.copy_manager = copy_manager
         self.symbol_mapper = symbol_mapper
         self.copy_executor = copy_executor
+        self.email_handler = email_handler  # ⭐ เพิ่ม email_handler
 
         # ✅ เพิ่ม BalanceHelper สำหรับ Percent Mode
         from .balance_helper import BalanceHelper
         self.balance_helper = BalanceHelper(session_manager)
 
-        logger.info("[COPY_HANDLER] Initialized successfully (Tick Value Support Enabled)")
+        logger.info("[COPY_HANDLER] Initialized successfully (Tick Value Support + Email Alerts Enabled)")
     
     def process_master_signal(self, api_key: str, signal_data: Dict) -> Dict:
         """
@@ -324,32 +326,112 @@ class CopyHandler:
             # คำนวณ % ที่ต่างจาก Min Lot
             percentage_diff = ((min_lot - volume) / min_lot) * 100
             
-            # ⭐ แจ้งเตือนตามระดับความแตกต่าง
-            if percentage_diff > 90:
-                # ⚠️ CRITICAL: ต่างกันมากกว่า 90%
-                logger.error(
-                    f"[COPY_HANDLER] ⚠️ CRITICAL WARNING: Volume {volume:.5f} is {percentage_diff:.1f}% less than min_lot {min_lot}!\n"
+            # ⭐ แจ้งเตือนตามระดับความแตกต่าง + ส่งอีเมล์
+            if percentage_diff > 80:  # ⭐ เปลี่ยนจาก 90% เป็น 80%
+                # 🚨 CRITICAL: ต่างกันมากกว่า 80%
+                log_message = (
+                    f"⚠️ CRITICAL WARNING: Volume {volume:.5f} is {percentage_diff:.1f}% less than min_lot {min_lot}!\n"
                     f"  Calculated volume is EXTREMELY small.\n"
                     f"  Trade value will be {(min_lot/volume):.1f}x HIGHER than Master!\n"
                     f"  Master will risk: ${volume * 10000:.2f} (example)\n"
-                    f"  Slave will risk: ${min_lot * 10000:.2f} (example)\n"
-                    f"  ⚠️ Proceeding with min_lot {min_lot} anyway..."
+                    f"  Slave will risk: ${min_lot * 10000:.2f} (example)"
                 )
+                logger.error(f"[COPY_HANDLER] {log_message}")
                 
-                # ✅ แม้จะต่างกันมาก แต่ถ้าไม่ได้เลือก skip ก็ยังเทรดต่อ
+                # ⭐ ส่งอีเมล์แจ้งเตือน CRITICAL
+                if self.email_handler:
+                    email_subject = "⚠️ CRITICAL: Min Volume Warning"
+                    email_message = f"""
+🚨 CRITICAL Min Volume Alert
+
+Volume Calculated: {volume:.5f} lot
+Min Lot Required: {min_lot} lot
+Difference: {percentage_diff:.1f}% less than minimum
+
+Risk Multiplier: {(min_lot/volume):.1f}x HIGHER than Master
+
+Example Risk:
+- Master Risk: ${volume * 10000:.2f}
+- Slave Risk: ${min_lot * 10000:.2f}
+
+{'⚠️ Trade will proceed with min_lot ' + str(min_lot) if not skip_if_too_small else '❌ Trade SKIPPED (strategy=skip)'}
+
+Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+"""
+                    try:
+                        self.email_handler.send_alert(email_subject, email_message.strip(), "high")
+                        logger.info("[COPY_HANDLER] ✅ CRITICAL email alert sent successfully")
+                    except Exception as e:
+                        logger.error(f"[COPY_HANDLER] ❌ Failed to send CRITICAL email: {e}")
+                
+                # ✅ ถ้าเป็น skip mode และต่างกันมากกว่า 80% → Skip
                 if skip_if_too_small:
                     logger.warning(
-                        f"[COPY_HANDLER] ❌ SKIPPING TRADE: Volume too small (strategy='skip')"
+                        f"[COPY_HANDLER] ❌ SKIPPING TRADE: Volume too small (>80% difference, strategy='skip')"
                     )
-                    return 0  # เฉพาะเมื่อเลือก skip เท่านั้น
+                    
+                    # ⭐ ส่งอีเมล์แจ้งเตือนการ Skip
+                    if self.email_handler:
+                        skip_email_subject = "❌ Trade SKIPPED - Min Volume"
+                        skip_email_message = f"""
+❌ Trade Skipped Alert
+
+Reason: Volume difference exceeds 80% threshold
+
+Volume Calculated: {volume:.5f} lot
+Min Lot Required: {min_lot} lot
+Difference: {percentage_diff:.1f}%
+
+Strategy: skip
+Action: Trade NOT executed
+
+This trade was skipped to maintain accurate risk management.
+Consider increasing Master volume or changing strategy to 'warn'.
+
+Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+"""
+                        try:
+                            self.email_handler.send_alert(skip_email_subject, skip_email_message.strip(), "high")
+                            logger.info("[COPY_HANDLER] ✅ SKIP email alert sent successfully")
+                        except Exception as e:
+                            logger.error(f"[COPY_HANDLER] ❌ Failed to send SKIP email: {e}")
+                    
+                    return 0  # ⭐ คืน 0 = ไม่เทรด (เฉพาะเมื่อเลือก skip)
+                else:
+                    logger.warning(
+                        f"[COPY_HANDLER] ⚠️ Proceeding with min_lot {min_lot} anyway (strategy='warn')..."
+                    )
                 
             elif percentage_diff > 50:
-                # ⚠️ WARNING: ต่างกัน 50-90%
-                logger.warning(
-                    f"[COPY_HANDLER] ⚠️ WARNING: Volume {volume:.5f} is {percentage_diff:.1f}% less than min_lot {min_lot}\n"
+                # ⚠️ WARNING: ต่างกัน 50-80%
+                log_message = (
+                    f"⚠️ WARNING: Volume {volume:.5f} is {percentage_diff:.1f}% less than min_lot {min_lot}\n"
                     f"  Trade value will be {(min_lot/volume):.1f}x HIGHER than Master.\n"
                     f"  Adjusted to min_lot {min_lot} and proceeding..."
                 )
+                logger.warning(f"[COPY_HANDLER] {log_message}")
+                
+                # ⭐ ส่งอีเมล์แจ้งเตือน WARNING
+                if self.email_handler:
+                    email_subject = "⚠️ Min Volume Warning"
+                    email_message = f"""
+⚠️ Min Volume Alert
+
+Volume Calculated: {volume:.5f} lot
+Min Lot Required: {min_lot} lot
+Difference: {percentage_diff:.1f}% less than minimum
+
+Risk Multiplier: {(min_lot/volume):.1f}x HIGHER than Master
+
+Action: Trade will proceed with min_lot {min_lot}
+
+Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+"""
+                    try:
+                        self.email_handler.send_alert(email_subject, email_message.strip(), "normal")
+                        logger.info("[COPY_HANDLER] ✅ WARNING email alert sent successfully")
+                    except Exception as e:
+                        logger.error(f"[COPY_HANDLER] ❌ Failed to send WARNING email: {e}")
             
             else:
                 # ℹ️ INFO: ต่างกันน้อยกว่า 50%
