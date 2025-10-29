@@ -1477,8 +1477,73 @@ void OnDeinit(const int reason) {
    LogMessage(LOG_INFO, "EA Stopped");
 }
 
+
+//+------------------------------------------------------------------+
+//| ⭐ NEW: Export Symbol Info for Tick Value Auto-Detection        |
+//+------------------------------------------------------------------+
+void ExportSymbolInfo(string symbol) {
+   if(!SymbolSelect(symbol, true)) {
+      LogMessage(LOG_WARNING, "[EXPORT] Cannot select symbol: " + symbol);
+      return;
+   }
+   
+   // ⭐ ดึงข้อมูล Symbol ทั้งหมดที่จำเป็น
+   double volume_min = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+   double volume_max = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+   double volume_step = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+   double contract_size = SymbolInfoDouble(symbol, SYMBOL_TRADE_CONTRACT_SIZE);  // 🔥 Contract Size
+   
+   // สร้าง JSON
+   string json = "{";
+   json += "\"symbol\":\"" + symbol + "\",";
+   json += "\"volume_min\":" + DoubleToString(volume_min, 2) + ",";
+   json += "\"volume_max\":" + DoubleToString(volume_max, 2) + ",";
+   json += "\"volume_step\":" + DoubleToString(volume_step, 2) + ",";
+   json += "\"trade_contract_size\":" + DoubleToString(contract_size, 2);  // 🔥 ส่งออก Contract Size
+   json += "}";
+   
+   // เขียนไฟล์ไปยังทั้ง MQL5/Files และ Data/MQL5/Files
+   string filename = "symbol_info_" + symbol + ".json";
+   
+   // Path 1: MQL5/Files (legacy)
+   string path1 = FilesRoot() + "\\" + filename;
+   int h1 = FileOpen(path1, FILE_WRITE | FILE_TXT | FILE_ANSI);
+   if(h1 != INVALID_HANDLE) {
+      FileWriteString(h1, json);
+      FileClose(h1);
+      LogMessage(LOG_DEBUG, "[EXPORT] Symbol info exported (legacy): " + symbol);
+   }
+   
+   // Path 2: Data/MQL5/Files (portable mode)
+   string dataPath = DataFolder() + "\\Data\\MQL5\\Files";
+   if(FolderExistsUnderFiles("..\\..\\Data\\MQL5\\Files") || FolderExistsUnderFiles("Data\\MQL5\\Files")) {
+      string path2 = "..\\..\\Data\\MQL5\\Files\\" + filename;
+      int h2 = FileOpen(path2, FILE_WRITE | FILE_TXT | FILE_ANSI);
+      if(h2 != INVALID_HANDLE) {
+         FileWriteString(h2, json);
+         FileClose(h2);
+         LogMessage(LOG_DEBUG, "[EXPORT] Symbol info exported (portable): " + symbol + " | Contract Size: " + DoubleToString(contract_size, 0));
+      }
+   }
+}
+
 void OnTimer() {
    if(!Initialized) return;
+   
+   // ⭐ Export symbol info ทุก 60 วินาที
+   static datetime last_export_time = 0;
+   if(TimeCurrent() - last_export_time >= 60) {
+      last_export_time = TimeCurrent();
+      
+      // Export ทุก Symbol ที่มี Position
+      for(int i = 0; i < PositionsTotal(); i++) {
+         ulong ticket = PositionGetTicket(i);
+         if(ticket > 0) {
+            string sym = PositionGetString(POSITION_SYMBOL);
+            ExportSymbolInfo(sym);
+         }
+      }
+   }
    
    if(EnableWebhook) {
       ProcessWebhookMode();
