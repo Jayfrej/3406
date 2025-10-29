@@ -1,4 +1,6 @@
-# server.py — full fixed version
+import smtplib
+import ssl
+# server.py â€” full fixed version
 
 import os
 import json
@@ -14,7 +16,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
 
-# ==== import app modules (รองรับทั้งโครงสร้างมีโฟลเดอร์ app/ หรือไฟล์เดี่ยว) ====
+# ==== import app modules ====
 try:
     from app.trades import trades_bp, init_trades, record_and_broadcast, delete_account_history
 except Exception:
@@ -54,18 +56,6 @@ try:
 except TypeError:
     limiter = Limiter(app, key_func=get_remote_address, default_limits=["100 per hour"])
 
-# ==== logging ====
-os.makedirs("logs", exist_ok=True)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler("logs/trading_bot.log", encoding="utf-8"),
-        logging.StreamHandler(),
-    ],
-)
-logger = logging.getLogger(__name__)
-
 # ==== components ====
 session_manager = SessionManager()
 symbol_mapper = SymbolMapper()
@@ -74,6 +64,7 @@ email_handler = EmailHandler()
 def _email_send_alert(subject: str, message: str) -> bool:
     """Wrapper to support email_handler.send_alert(...) when class lacks it."""
     try:
+        from datetime import datetime
         ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         body = f"""MT5 Trading Bot Alert
 =====================
@@ -85,7 +76,7 @@ Subject: {subject}
 
 ---
 This is an automated message from MT5 Trading Bot."""
-        # เรียกใช้ send_alert แทน send_email
+        # à¹€à¸£à¸µà¸¢à¸à¹ƒà¸Šà¹‰ send_alert à¹à¸—à¸™ send_email
         email_handler.send_alert(subject, body)
         return True
     except Exception as e:
@@ -103,7 +94,7 @@ if not hasattr(email_handler, 'send_alert'):
         pass
 
 
-# =================== Copy Trading Setup (เพิ่มหลัง email_handler) ===================
+# =================== Copy Trading Setup (à¹€à¸žà¸´à¹ˆà¸¡à¸«à¸¥à¸±à¸‡ email_handler) ===================
 from app.copy_trading.copy_manager import CopyManager
 from app.copy_trading.copy_handler import CopyHandler
 from app.copy_trading.copy_executor import CopyExecutor
@@ -115,14 +106,32 @@ copy_history = CopyHistory()
 copy_executor = CopyExecutor(session_manager, copy_history)
 copy_handler = CopyHandler(copy_manager, symbol_mapper, copy_executor, session_manager, email_handler)
 
+try:
+    logger
+except NameError:
+    import logging
+    logger = logging.getLogger(__name__)
 logger.info("[COPY_TRADING] Components initialized successfully")
 
-# ==== register trades blueprint + warm buffer ใน app context ====
+
+# ==== logging ====
+os.makedirs("logs", exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler("logs/trading_bot.log", encoding="utf-8"),
+        logging.StreamHandler(),
+    ],
+)
+logger = logging.getLogger(__name__)
+
+# ==== register trades blueprint + warm buffer à¹ƒà¸™ app context ====
 app.register_blueprint(trades_bp)
 with app.app_context():
     init_trades()
 
-# ==== data paths (สำหรับ webhook allowlist / command files) ====
+# ==== data paths (à¸ªà¸³à¸«à¸£à¸±à¸š webhook allowlist / command files) ====
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 WEBHOOK_ACCOUNTS_FILE = os.path.join(DATA_DIR, "webhook_accounts.json")
@@ -145,7 +154,7 @@ def _save_json(path, obj):
 
 def get_webhook_allowlist():
     """
-    โครงสร้าง: [{"account":"111", "nickname":"A", "enabled": true}, ...]
+    à¹‚à¸„à¸£à¸‡à¸ªà¸£à¹‰à¸²à¸‡: [{"account":"111", "nickname":"A", "enabled": true}, ...]
     """
     lst = _load_json(WEBHOOK_ACCOUNTS_FILE, [])
     out = []
@@ -185,45 +194,45 @@ def login_api():
         session["auth"] = True
         username = data.get("username", "unknown")
         ip = request.remote_addr
-        add_system_log('success', f' [200] Login successful - User: {username}, IP: {ip}')
+        add_system_log('success', f'ðŸ”“ [200] Login successful - User: {username}, IP: {ip}')
         return jsonify({"ok": True})
     username = data.get("username", "unknown")
     ip = request.remote_addr
-    add_system_log('warning', f' [401] Login failed - User: {username}, IP: {ip}')
+    add_system_log('warning', f'ðŸ”’ [401] Login failed - User: {username}, IP: {ip}')
     return jsonify({"ok": False, "error": "Invalid credentials"}), 401
 
 
 # =================== monitor instances ===================
 def monitor_instances():
     """
-     ปรับปรุง: ส่ง Email เฉพาะเมื่อ Status เปลี่ยน
-    - เปิด: Offline → Online
-    - ปิด: Online → Offline
+    âœ… à¸›à¸£à¸±à¸šà¸›à¸£à¸¸à¸‡: à¸ªà¹ˆà¸‡ Email à¹€à¸‰à¸žà¸²à¸°à¹€à¸¡à¸·à¹ˆà¸­ Status à¹€à¸›à¸¥à¸µà¹ˆà¸¢à¸™
+    - à¹€à¸›à¸´à¸”: Offline â†’ Online
+    - à¸›à¸´à¸”: Online â†’ Offline
     """
-    # เ็บ Status เดิม
+    # à¹€à¸à¹‡à¸š Status à¹€à¸”à¸´à¸¡
     last_status = {}
-
+    
     while True:
         try:
             accounts = session_manager.get_all_accounts()
-
+            
             for info in accounts:
                 account = info["account"]
                 nickname = info.get("nickname", "")
-
-                # เช็ค Status ปัจจุบัน
+                
+                # à¹€à¸Šà¹‡à¸„ Status à¸›à¸±à¸ˆà¸ˆà¸¸à¸šà¸±à¸™
                 is_alive = session_manager.is_instance_alive(account)
                 new_status = "Online" if is_alive else "Offline"
-
-                # ดึง Status เ่า
+                
+                # à¸”à¸¶à¸‡ Status à¹€à¸à¹ˆà¸²
                 old_status = last_status.get(account, None)
-
-                # ถ้า Status เปลี่ยน → ส่ง Email
+                
+                # à¸–à¹‰à¸² Status à¹€à¸›à¸¥à¸µà¹ˆà¸¢à¸™ â†’ à¸ªà¹ˆà¸‡ Email
                 if old_status and new_status != old_status:
                     display_name = f"{account} ({nickname})" if nickname else account
-
+                    
                     if new_status == "Offline":
-                        # Account ปิด
+                        # Account à¸›à¸´à¸”
                         email_handler.send_error_alert(
                             f"Account Offline - {display_name}",
                             f"""
@@ -238,11 +247,11 @@ Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 The MT5 instance has stopped or crashed. Please check the system.
                             """.strip()
                         )
-                        add_system_log('warning', f'  Account {account} went offline')
+                        add_system_log('warning', f'âš ï¸ Account {account} went offline')
                         logger.warning(f"[STATUS_CHANGE] {account}: {old_status} -> {new_status}")
-
+                        
                     elif new_status == "Online":
-                        # Account เปิด
+                        # Account à¹€à¸›à¸´à¸”
                         email_handler.send_alert(
                             f"Account Online - {display_name}",
                             f"""
@@ -258,17 +267,17 @@ The MT5 instance has started successfully.
                             """.strip(),
                             priority="low"
                         )
-                        add_system_log('success', f' Account {account} is now online')
+                        add_system_log('success', f'âœ… Account {account} is now online')
                         logger.info(f"[STATUS_CHANGE] {account}: {old_status} -> {new_status}")
-
-                # อัปเดต Status ใน DB
+                
+                # à¸­à¸±à¸›à¹€à¸”à¸• Status à¹ƒà¸™ DB
                 session_manager.update_account_status(account, new_status)
-
-                # บันทึ Status ปัจจุบัน
+                
+                # à¸šà¸±à¸™à¸—à¸¶à¸ Status à¸›à¸±à¸ˆà¸ˆà¸¸à¸šà¸±à¸™
                 last_status[account] = new_status
-
+            
             time.sleep(30)
-
+            
         except Exception as e:
             logger.error(f"[MONITOR_ERROR] {e}", exc_info=True)
             time.sleep(60)
@@ -301,8 +310,7 @@ def static_files(filename):
 # =================== health & stats ===================
 @app.route('/health', methods=['GET', 'HEAD'])
 def health_check():
-    """สำหรับหน้า Account Management → Usage Statistics"""
-    """ทางเลือกเบากว่า /health (ส่งตัวเลขล้วน)"""
+    """à¸ªà¸³à¸«à¸£à¸±à¸šà¸«à¸™à¹‰à¸² Account Management â†’ Usage Statistics"""
     try:
         accounts = session_manager.get_all_accounts()
         total = len(accounts)
@@ -329,7 +337,7 @@ def health_check():
 
 @app.get("/accounts/stats")
 def accounts_stats():
-    """ทางเลือเบาว่า /health (ส่งตัวเลขล้วน)"""
+    """à¸—à¸²à¸‡à¹€à¸¥à¸·à¸­à¸à¹€à¸šà¸²à¸à¸§à¹ˆà¸² /health (à¸ªà¹ˆà¸‡à¸•à¸±à¸§à¹€à¸¥à¸‚à¸¥à¹‰à¸§à¸™)"""
     accounts = session_manager.get_all_accounts()
     total = len(accounts)
     online = sum(1 for a in accounts if a.get('status') == 'Online')
@@ -358,7 +366,7 @@ def add_account():
         if not account:
             return jsonify({'error': 'Account number is required'}), 400
         if session_manager.account_exists(account):
-            add_system_log('warning', f'  [400] Account creation failed - {account} already exists')
+            add_system_log('warning', f'âš ï¸ [400] Account creation failed - {account} already exists')
             return jsonify({'error': 'Account already exists'}), 400
         if session_manager.create_instance(account, nickname):
             logger.info(f"[ACCOUNT_ADDED] {account} ({nickname})")
@@ -376,10 +384,10 @@ def add_account():
 def restart_account(account):
     ok = session_manager.restart_instance(account)
     if ok:
-        add_system_log('info', f' [200] Account restarted: {account}')
+        add_system_log('info', f'ðŸ”„ [200] Account restarted: {account}')
         return jsonify({'success': True})
     else:
-        add_system_log('error', f' [500] Restart failed: {account}')
+        add_system_log('error', f'âŒ [500] Restart failed: {account}')
         return jsonify({'error': 'Failed to restart account'}), 500
 
 
@@ -388,10 +396,10 @@ def restart_account(account):
 def stop_account(account):
     ok = session_manager.stop_instance(account)
     if ok:
-        add_system_log('warning', f' [200] Account stopped: {account}')
+        add_system_log('warning', f'â¸ï¸ [200] Account stopped: {account}')
         return jsonify({'success': True})
     else:
-        add_system_log('error', f' [500] Stop failed: {account}')
+        add_system_log('error', f'âŒ [500] Stop failed: {account}')
         return jsonify({'error': 'Failed to stop account'}), 500
 
 
@@ -401,10 +409,10 @@ def open_account(account):
     try:
         if session_manager.is_instance_alive(account):
             session_manager.focus_instance(account)
-            add_system_log('info', f'️ [200] Account focused: {account} (already online)')
+            add_system_log('info', f'ðŸ‘ï¸ [200] Account focused: {account} (already online)')
             return jsonify({'success': True, 'message': 'Account is already online'})
         if session_manager.start_instance(account):
-            add_system_log('success', f' [200] Account opened: {account}')
+            add_system_log('success', f'âœ… [200] Account opened: {account}')
             return jsonify({'success': True})
         return jsonify({'error': 'Failed to open account'}), 500
     except Exception as e:
@@ -415,19 +423,19 @@ def open_account(account):
 @app.delete('/accounts/<account>')
 @session_login_required
 def delete_account(account):
-    """ลบบัญชี Master/Slave จริง และล้าง history/allowlist (ถ้ามี)"""
+    """à¸¥à¸šà¸šà¸±à¸à¸Šà¸µ Master/Slave à¸ˆà¸£à¸´à¸‡ à¹à¸¥à¸°à¸¥à¹‰à¸²à¸‡ history/allowlist (à¸–à¹‰à¸²à¸¡à¸µ)"""
     try:
         ok = session_manager.delete_instance(str(account))
         app.logger.info(f'[DELETE_ACCOUNT] account={account} ok={ok}')
         if ok:
-            # เก็บ logic เดิมไว้ (history/allowlist) แต่ไม่ให้ error ทำให้ล้ม
+            # à¹€à¸à¹‡à¸š logic à¹€à¸”à¸´à¸¡à¹„à¸§à¹‰ (history/allowlist) à¹à¸•à¹ˆà¹„à¸¡à¹ˆà¹ƒà¸«à¹‰ error à¸—à¸³à¹ƒà¸«à¹‰à¸¥à¹‰à¸¡
             try:
                 deleted = delete_account_history(account)
                 app.logger.info(f'[HISTORY_DELETED] {deleted} events for {account}')
-                add_system_log('warning', f'️ [200] Account deleted: {account} ({deleted} history records removed)')
+                add_system_log('warning', f'ðŸ—‘ï¸ [200] Account deleted: {account} ({deleted} history records removed)')
             except Exception as e:
                 app.logger.warning(f'[HISTORY_DELETE_ERROR] {e}')
-                add_system_log('warning', f'️ [200] Account deleted: {account}')
+                add_system_log('warning', f'ðŸ—‘ï¸ [200] Account deleted: {account}')
             return jsonify({'ok': True}), 200
         else:
             return jsonify({'ok': False}), 200
@@ -449,7 +457,7 @@ def add_webhook_account():
     data = request.get_json(silent=True) or {}
     account = str(data.get("account") or data.get("id") or "").strip()
     if not account:
-        add_system_log('error', ' [400] Webhook account creation failed - Account number required')
+        add_system_log('error', 'âŒ [400] Webhook account creation failed - Account number required')
         return jsonify({"error": "account required"}), 400
     nickname = str(data.get("nickname") or "").strip()
     enabled = bool(data.get("enabled", True))
@@ -467,7 +475,7 @@ def add_webhook_account():
 
     _save_json(WEBHOOK_ACCOUNTS_FILE, lst)
     status_text = "updated" if found else "added"
-    add_system_log('success', f' [200] Webhook account {status_text}: {account} ({nickname})')
+    add_system_log('success', f'âœ… [200] Webhook account {status_text}: {account} ({nickname})')
     return jsonify({"ok": True, "account": account})
 
 
@@ -476,7 +484,7 @@ def add_webhook_account():
 def delete_webhook_account(account):
     lst = [it for it in get_webhook_allowlist() if it["account"] != str(account)]
     _save_json(WEBHOOK_ACCOUNTS_FILE, lst)
-    add_system_log('warning', f'️ [200] Webhook account removed: {account}')
+    add_system_log('warning', f'ðŸ—‘ï¸ [200] Webhook account removed: {account}')
     return jsonify({"ok": True})
 
 
@@ -505,29 +513,15 @@ def webhook_health():
     return jsonify({'status': 'ok', 'webhook_status': 'active', 'timestamp': datetime.now().isoformat()})
 
 
-# =================== webhook handler (เช็ค allowlist) ===================
-# =================== webhook handler (เช็ค allowlist) ===================
+# =================== webhook handler (à¹€à¸Šà¹‡à¸„ allowlist) ===================
+# =================== webhook handler (à¹€à¸Šà¹‡à¸„ allowlist) ===================
 
 @app.post('/webhook/<token>')
+@limiter.limit("10 per minute")
 def webhook_handler(token):
-    # เช็ค rate limit แบบ dynamic
-    client_ip = request.remote_addr
-    rate_key = f"webhook:{client_ip}"
-    webhook_limit = get_webhook_rate_limit()
-    
-    if not check_custom_rate_limit(rate_key, webhook_limit):
-        logger.warning(f"[WEBHOOK] Rate limit exceeded from {client_ip}")
-        add_system_log('warning', f' [429] Webhook rate limit exceeded - IP: {client_ip}, Limit: {webhook_limit}') 
-        return jsonify({
-            'error': 'Too many requests',
-            'limit': webhook_limit,
-            'retry_after': '60 seconds'
-        }), 429
-
-
     if token != WEBHOOK_TOKEN:
         logger.warning("[UNAUTHORIZED] invalid webhook token")
-        add_system_log('error', ' [401] Webhook unauthorized - Invalid token')
+        add_system_log('error', 'ðŸ”’ [401] Webhook unauthorized - Invalid token')
         email_handler.send_alert("Unauthorized Webhook Access", "Invalid token")
         return jsonify({'error': 'Unauthorized'}), 401
 
@@ -537,7 +531,7 @@ def webhook_handler(token):
             raise ValueError("No JSON data received")
     except Exception as e:
         logger.error(f"[BAD_PAYLOAD] {e}")
-        add_system_log('error', f' [400] Webhook bad request - Invalid JSON: {str(e)[:80]}')
+        add_system_log('error', f'âŒ [400] Webhook bad request - Invalid JSON: {str(e)[:80]}')
         email_handler.send_alert("Bad Webhook Payload", f"Invalid JSON: {e}")
         return jsonify({'error': 'Invalid JSON payload'}), 400
 
@@ -546,12 +540,12 @@ def webhook_handler(token):
     symbol = data.get('symbol', '-')
     volume = data.get('volume', '-')
     account = data.get('account_number') or (data.get('accounts', [None])[0] if data.get('accounts') else '-')
-    add_system_log('info', f' [200] Webhook received: {action} {symbol} Vol:{volume} Acc:{account}')
+    add_system_log('info', f'ðŸ“¥ [200] Webhook received: {action} {symbol} Vol:{volume} Acc:{account}')
 
     valid = validate_webhook_payload(data)
     if not valid["valid"]:
         logger.error(f"[BAD_PAYLOAD] {valid['error']}")
-        add_system_log('error', f' [400] Webhook validation failed: {valid["error"][:80]}')
+        add_system_log('error', f'âŒ [400] Webhook validation failed: {valid["error"][:80]}')
         email_handler.send_alert("Bad Webhook Payload", f"Validation failed: {valid['error']}")
         return jsonify({'error': valid['error']}), 400
 
@@ -560,7 +554,7 @@ def webhook_handler(token):
 
     allowed, blocked = [], []
 
-    #  ตรวจสอบต่ละ account ว่าอยู่ใน Webhook Management หรือไม่
+    # âœ… à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸šà¹à¸•à¹ˆà¸¥à¸° account à¸§à¹ˆà¸²à¸­à¸¢à¸¹à¹ˆà¹ƒà¸™ Webhook Management à¸«à¸£à¸·à¸­à¹„à¸¡à¹ˆ
     for acc in target_accounts:
         acc_str = str(acc).strip()
 
@@ -569,7 +563,7 @@ def webhook_handler(token):
         else:
             blocked.append(acc_str)
 
-            #  บันทึ Error ลง Trade History
+            # ðŸ”´ à¸šà¸±à¸™à¸—à¸¶à¸ Error à¸¥à¸‡ Trade History
             record_and_broadcast({
                 'status': 'error',
                 'action': str(data.get('action', 'UNKNOWN')).upper(),
@@ -577,19 +571,19 @@ def webhook_handler(token):
                 'account': acc_str,
                 'volume': data.get('volume', ''),
                 'price': data.get('price', ''),
-                'message': ' Account not in Webhook Management'
+                'message': 'âŒ Account not in Webhook Management'
             })
 
             logger.error(f"[WEBHOOK_ERROR] Account {acc_str} not in Webhook Management")
-            add_system_log('warning', f'  [403] Webhook blocked - Account {acc_str} not in whitelist')
+            add_system_log('warning', f'âš ï¸ [403] Webhook blocked - Account {acc_str} not in whitelist')
 
     if not allowed:
         error_msg = f"No allowed accounts for webhook. Blocked: {', '.join(blocked)}"
         logger.error(f"[WEBHOOK_ERROR] {error_msg}")
-        add_system_log('error', f' [400] Webhook rejected - All accounts blocked ({len(blocked)} accounts)')
+        add_system_log('error', f'âŒ [400] Webhook rejected - All accounts blocked ({len(blocked)} accounts)')
         return jsonify({'error': error_msg}), 400
 
-    # ส่งต่อเฉพาะบัชีที่ผ่านารอนุมัติ
+    # à¸ªà¹ˆà¸‡à¸•à¹ˆà¸­à¹€à¸‰à¸žà¸²à¸°à¸šà¸±à¸à¸Šà¸µà¸—à¸µà¹ˆà¸œà¹ˆà¸²à¸™à¸à¸²à¸£à¸­à¸™à¸¸à¸¡à¸±à¸•à¸´
     data_processed = dict(data)
     if 'accounts' in data_processed:
         data_processed['accounts'] = allowed
@@ -603,14 +597,14 @@ def webhook_handler(token):
         action = data_processed.get('action', 'UNKNOWN')
         symbol = data_processed.get('symbol', '-')
         volume = data_processed.get('volume', '-')
-        add_system_log('success', f' [200] Webhook processed: {action} {symbol} Vol:{volume} → {len(allowed)} account(s)')
+        add_system_log('success', f'âœ… [200] Webhook processed: {action} {symbol} Vol:{volume} â†’ {len(allowed)} account(s)')
         if blocked:
-            msg += f" (  Blocked {len(blocked)} account(s): {', '.join(blocked)})"
-            add_system_log('warning', f'  Webhook partial: {len(blocked)} account(s) blocked')
+            msg += f" (âš ï¸ Blocked {len(blocked)} account(s): {', '.join(blocked)})"
+            add_system_log('warning', f'âš ï¸ Webhook partial: {len(blocked)} account(s) blocked')
         return jsonify({'success': True, 'message': msg})
     else:
         error_msg = result.get('error', 'Unknown error')
-        add_system_log('error', f' [500] Webhook processing failed: {error_msg[:80]}')
+        add_system_log('error', f'âŒ [500] Webhook processing failed: {error_msg[:80]}')
         return jsonify({'error': result.get('error', 'Processing failed')}), 500
 
     try:
@@ -619,7 +613,7 @@ def webhook_handler(token):
             raise ValueError("No JSON data received")
     except Exception as e:
         logger.error(f"[BAD_PAYLOAD] {e}")
-        add_system_log('error', f' [400] Webhook bad request - Invalid JSON: {str(e)[:80]}')
+        add_system_log('error', f'âŒ [400] Webhook bad request - Invalid JSON: {str(e)[:80]}')
         email_handler.send_alert("Bad Webhook Payload", f"Invalid JSON: {e}")
         return jsonify({'error': 'Invalid JSON payload'}), 400
 
@@ -628,11 +622,11 @@ def webhook_handler(token):
     valid = validate_webhook_payload(data)
     if not valid["valid"]:
         logger.error(f"[BAD_PAYLOAD] {valid['error']}")
-        add_system_log('error', f' [400] Webhook validation failed: {valid["error"][:80]}')
+        add_system_log('error', f'âŒ [400] Webhook validation failed: {valid["error"][:80]}')
         email_handler.send_alert("Bad Webhook Payload", f"Validation failed: {valid['error']}")
         return jsonify({'error': valid['error']}), 400
 
-    # target accounts (รองรับ accounts: [] หรือ account_number เดี่ยว)
+    # target accounts (à¸£à¸­à¸‡à¸£à¸±à¸š accounts: [] à¸«à¸£à¸·à¸­ account_number à¹€à¸”à¸µà¹ˆà¸¢à¸§)
     target_accounts = data.get('accounts') or [data.get('account_number')]
 
     allowed, blocked = [], []
@@ -651,7 +645,7 @@ def webhook_handler(token):
     if not allowed:
         return jsonify({'error': 'No allowed accounts for webhook'}), 400
 
-    # ส่งต่อเฉพาะบัชีที่ผ่านารอนุาต
+    # à¸ªà¹ˆà¸‡à¸•à¹ˆà¸­à¹€à¸‰à¸žà¸²à¸°à¸šà¸±à¸à¸Šà¸µà¸—à¸µà¹ˆà¸œà¹ˆà¸²à¸™à¸à¸²à¸£à¸­à¸™à¸¸à¸à¸²à¸•
     data_processed = dict(data)
     if 'accounts' in data_processed:
         data_processed['accounts'] = allowed
@@ -725,13 +719,13 @@ def validate_webhook_payload(data):
 # =================== webhook core ===================
 def process_webhook(data):
     """
-    ส่งคำสั่งไปยัง EA ตาม accounts ที่ำหนด พร้อมบันทึลง history
+    à¸ªà¹ˆà¸‡à¸„à¸³à¸ªà¸±à¹ˆà¸‡à¹„à¸›à¸¢à¸±à¸‡ EA à¸•à¸²à¸¡ accounts à¸—à¸µà¹ˆà¸à¸³à¸«à¸™à¸” à¸žà¸£à¹‰à¸­à¸¡à¸šà¸±à¸™à¸—à¸¶à¸à¸¥à¸‡ history
     """
     try:
         target_accounts = data['accounts'] if 'accounts' in data else [data['account_number']]
         action = str(data['action']).upper()
 
-        # map symbol ถ้ามีารใช้สัลัษณ์
+        # map symbol à¸–à¹‰à¸²à¸¡à¸µà¸à¸²à¸£à¹ƒà¸Šà¹‰à¸ªà¸±à¸à¸¥à¸±à¸à¸©à¸“à¹Œ
         mapped_symbol = None
         if action in ['BUY', 'SELL', 'LONG', 'SHORT', 'CLOSE_SYMBOL'] or (action == 'CLOSE' and 'symbol' in data):
             original_symbol = data['symbol']
@@ -740,7 +734,7 @@ def process_webhook(data):
                 error_msg = f'Cannot map symbol: {original_symbol}'
                 logger.error(f"[WEBHOOK_ERROR] {error_msg}")
 
-                # บันทึ error สำหรับทุ account
+                # à¸šà¸±à¸™à¸—à¸¶à¸ error à¸ªà¸³à¸«à¸£à¸±à¸šà¸—à¸¸à¸ account
                 for account in target_accounts:
                     record_and_broadcast({
                         'status': 'error',
@@ -749,19 +743,19 @@ def process_webhook(data):
                         'account': account,
                         'volume': data.get('volume', ''),
                         'price': data.get('price', ''),
-                        'message': f' {error_msg}'
+                        'message': f'âŒ {error_msg}'
                     })
 
                 return {'success': False, 'error': error_msg}
 
-            logger.info(f"[SYMBOL_MAPPING] {original_symbol} → {mapped_symbol}")
+            logger.info(f"[SYMBOL_MAPPING] {original_symbol} â†’ {mapped_symbol}")
 
         results = []
 
         for account in target_accounts:
             account_str = str(account).strip()
 
-            #  1. ตรวจสอบว่าบัชีมีอยู่ในระบบหรือไม่
+            # ðŸ”´ 1. à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸šà¸§à¹ˆà¸²à¸šà¸±à¸à¸Šà¸µà¸¡à¸µà¸­à¸¢à¸¹à¹ˆà¹ƒà¸™à¸£à¸°à¸šà¸šà¸«à¸£à¸·à¸­à¹„à¸¡à¹ˆ
             if not session_manager.account_exists(account_str):
                 error_msg = f'Account {account_str} not found in system'
                 logger.error(f"[WEBHOOK_ERROR] {error_msg}")
@@ -773,13 +767,13 @@ def process_webhook(data):
                     'account': account_str,
                     'volume': data.get('volume', ''),
                     'price': data.get('price', ''),
-                    'message': f' {error_msg}'
+                    'message': f'âŒ {error_msg}'
                 })
 
                 results.append({'account': account_str, 'success': False, 'error': error_msg})
                 continue
 
-            #  2. ตรวจสอบว่าบัชี Online หรือไม่
+            # ðŸ”´ 2. à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸šà¸§à¹ˆà¸²à¸šà¸±à¸à¸Šà¸µ Online à¸«à¸£à¸·à¸­à¹„à¸¡à¹ˆ
             if not session_manager.is_instance_alive(account_str):
                 error_msg = f'Account {account_str} is offline'
                 logger.warning(f"[WEBHOOK_ERROR] {error_msg}")
@@ -791,13 +785,13 @@ def process_webhook(data):
                     'account': account_str,
                     'volume': data.get('volume', ''),
                     'price': data.get('price', ''),
-                    'message': f'  {error_msg}'
+                    'message': f'âš ï¸ {error_msg}'
                 })
 
                 results.append({'account': account_str, 'success': False, 'error': error_msg})
                 continue
 
-            #  บัชีผ่านารตรวจสอบ - ส่งคำสั่ง
+            # âœ… à¸šà¸±à¸à¸Šà¸µà¸œà¹ˆà¸²à¸™à¸à¸²à¸£à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸š - à¸ªà¹ˆà¸‡à¸„à¸³à¸ªà¸±à¹ˆà¸‡
             cmd = prepare_trading_command(data, mapped_symbol, account_str)
             ok = write_command_for_ea(account_str, cmd)
 
@@ -828,7 +822,7 @@ def process_webhook(data):
 
                 results.append({'account': account_str, 'success': False, 'error': error_msg})
 
-        # สรุปผลลัพธ์
+        # à¸ªà¸£à¸¸à¸›à¸œà¸¥à¸¥à¸±à¸žà¸˜à¹Œ
         success_count = sum(1 for r in results if r['success'])
         total_count = len(results)
 
@@ -843,18 +837,18 @@ def process_webhook(data):
         logger.error(f"[WEBHOOK_ERROR] {e}", exc_info=True)
         return {'success': False, 'error': str(e)}
 
-        # map symbol ถ้ามีารใช้สัลัษณ์
+        # map symbol à¸–à¹‰à¸²à¸¡à¸µà¸à¸²à¸£à¹ƒà¸Šà¹‰à¸ªà¸±à¸à¸¥à¸±à¸à¸©à¸“à¹Œ
         mapped_symbol = None
         if action in ['BUY', 'SELL', 'LONG', 'SHORT', 'CLOSE_SYMBOL'] or (action == 'CLOSE' and 'symbol' in data):
             original_symbol = data['symbol']
             mapped_symbol = symbol_mapper.map_symbol(original_symbol)
             if not mapped_symbol:
                 return {'success': False, 'error': f'Cannot map symbol: {original_symbol}'}
-            logger.info(f"[SYMBOL_MAPPING] {original_symbol} → {mapped_symbol}")
+            logger.info(f"[SYMBOL_MAPPING] {original_symbol} â†’ {mapped_symbol}")
 
         results = []
         for account in target_accounts:
-            # ตรวจว่ามีบัชีใน server ละ online
+            # à¸•à¸£à¸§à¸ˆà¸§à¹ˆà¸²à¸¡à¸µà¸šà¸±à¸à¸Šà¸µà¹ƒà¸™ server à¹à¸¥à¸° online
             if not session_manager.account_exists(account):
                 record_and_broadcast({
                     'status': 'error', 'action': action,
@@ -937,7 +931,7 @@ def prepare_trading_command(data, mapped_symbol, account):
 
 def write_command_for_ea(account, command):
     """
-    เขียนคำสั่งลงไฟล์ให้ EA อ่าน (MT5 จะอ่านจา MQL5/Files ของ instance)
+    à¹€à¸‚à¸µà¸¢à¸™à¸„à¸³à¸ªà¸±à¹ˆà¸‡à¸¥à¸‡à¹„à¸Ÿà¸¥à¹Œà¹ƒà¸«à¹‰ EA à¸­à¹ˆà¸²à¸™ (MT5 à¸ˆà¸°à¸­à¹ˆà¸²à¸™à¸ˆà¸²à¸ MQL5/Files à¸‚à¸­à¸‡ instance)
     - primary: <instance>\\Data\\MQL5\\Files\\webhook_command_<ts>.json  (portable mode)
     - fallback: <instance>\\MQL5\\Files\\webhook_command_<ts>.json
     """
@@ -978,9 +972,9 @@ def write_command_for_ea(account, command):
 @app.get('/api/pairs')
 @session_login_required
 def list_pairs():
-    """ดึงรายาร Copy Pairs ทั้งหมด (ใช้ตอนรีเฟรชหน้า)"""
+    """à¸”à¸¶à¸‡à¸£à¸²à¸¢à¸à¸²à¸£ Copy Pairs à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸” (à¹ƒà¸Šà¹‰à¸•à¸­à¸™à¸£à¸µà¹€à¸Ÿà¸£à¸Šà¸«à¸™à¹‰à¸²)"""
     try:
-        # รองรับทั้ง list_pairs() ละ get_all_pairs()
+        # à¸£à¸­à¸‡à¸£à¸±à¸šà¸—à¸±à¹‰à¸‡ list_pairs() à¹à¸¥à¸° get_all_pairs()
         if hasattr(copy_manager, 'list_pairs'):
             pairs = copy_manager.list_pairs()
         else:
@@ -994,7 +988,7 @@ def list_pairs():
 @app.post('/api/pairs')
 @session_login_required
 def create_copy_pair():
-    """สร้าง Copy Pair ใหม่"""
+    """à¸ªà¸£à¹‰à¸²à¸‡ Copy Pair à¹ƒà¸«à¸¡à¹ˆ"""
     try:
         data = request.get_json() or {}
 
@@ -1005,15 +999,15 @@ def create_copy_pair():
             return jsonify({'error': 'Master and slave accounts are required'}), 400
 
         if master == slave:
-            add_system_log('error', f' [400] Copy pair creation failed - Master and slave cannot be the same ({master})')
+            add_system_log('error', f'âŒ [400] Copy pair creation failed - Master and slave cannot be the same ({master})')
             return jsonify({'error': 'Master and slave accounts must be different'}), 400
 
         if not session_manager.account_exists(master):
-            add_system_log('error', f' [404] Copy pair creation failed - Master account {master} not found')
+            add_system_log('error', f'âŒ [404] Copy pair creation failed - Master account {master} not found')
             return jsonify({'error': f'Master account {master} not found'}), 404
 
         if not session_manager.account_exists(slave):
-            add_system_log('error', f' [404] Copy pair creation failed - Slave account {slave} not found')
+            add_system_log('error', f'âŒ [404] Copy pair creation failed - Slave account {slave} not found')
             return jsonify({'error': f'Slave account {slave} not found'}), 404
 
         master_nickname = str(data.get('master_nickname', '')).strip()
@@ -1029,7 +1023,7 @@ def create_copy_pair():
         )
 
         logger.info(f"[API] Created copy pair: {master} -> {slave}")
-        add_system_log('success', f' [201] Copy pair created: {master} → {slave} ({master_nickname} → {slave_nickname})')
+        add_system_log('success', f'âœ… [201] Copy pair created: {master} â†’ {slave} ({master_nickname} â†’ {slave_nickname})')
         return jsonify({'success': True, 'pair': pair}), 201
 
     except Exception as e:
@@ -1040,7 +1034,7 @@ def create_copy_pair():
 @app.put('/api/pairs/<pair_id>')
 @session_login_required
 def update_copy_pair(pair_id):
-    """อัปเดต Copy Pair"""
+    """à¸­à¸±à¸›à¹€à¸”à¸• Copy Pair"""
     try:
         data = request.get_json() or {}
         success = copy_manager.update_pair(pair_id, data)
@@ -1049,10 +1043,10 @@ def update_copy_pair(pair_id):
             pair = copy_manager.get_pair_by_id(pair_id)
             master = pair.get('master_account', '')
             slave = pair.get('slave_account', '')
-            add_system_log('info', f' [200] Copy pair updated: {master} → {slave}')
+            add_system_log('info', f'âœï¸ [200] Copy pair updated: {master} â†’ {slave}')
             return jsonify({'success': True, 'pair': pair})
         else:
-            add_system_log('warning', f'  [404] Copy pair update failed - Pair {pair_id} not found')
+            add_system_log('warning', f'âš ï¸ [404] Copy pair update failed - Pair {pair_id} not found')
             return jsonify({'error': 'Pair not found'}), 404
 
     except Exception as e:
@@ -1063,16 +1057,16 @@ def update_copy_pair(pair_id):
 @app.delete('/api/pairs/<pair_id>')
 @session_login_required
 def delete_pair(pair_id):
-    """ลบ Copy Pair + log + save"""
+    """à¸¥à¸š Copy Pair + log + save"""
     try:
         deleted = copy_manager.delete_pair(pair_id)
         if not deleted:
             app.logger.warning(f'[PAIR_DELETE_NOT_FOUND] {pair_id}')
-            add_system_log('warning', f'  [404] Copy pair deletion failed - Pair {pair_id} not found')
+            add_system_log('warning', f'âš ï¸ [404] Copy pair deletion failed - Pair {pair_id} not found')
             return jsonify({'ok': False, 'error': 'Pair not found'}), 404
 
         app.logger.info(f'[PAIR_DELETE] {pair_id}')
-        add_system_log('warning', f'️ [200] Copy pair deleted: {pair_id}')
+        add_system_log('warning', f'ðŸ—‘ï¸ [200] Copy pair deleted: {pair_id}')
         return jsonify({'ok': True}), 200
     except Exception as e:
         app.logger.exception('[PAIR_DELETE_ERROR]')
@@ -1082,17 +1076,17 @@ def delete_pair(pair_id):
 @app.post('/api/pairs/<pair_id>/toggle')
 @session_login_required
 def toggle_copy_pair(pair_id):
-    """เปิด/ปิด Copy Pair"""
+    """à¹€à¸›à¸´à¸”/à¸›à¸´à¸” Copy Pair"""
     try:
         new_status = copy_manager.toggle_pair_status(pair_id)
 
         if new_status:
-            status_emoji = "" if new_status == "active" else ""
+            status_emoji = "âœ…" if new_status == "active" else "â¸ï¸"
             status_text = "enabled" if new_status == "active" else "disabled"
             add_system_log('info', f'{status_emoji} [200] Copy pair {status_text}: {pair_id}')
             return jsonify({'success': True, 'status': new_status})
         else:
-            add_system_log('warning', f'  [404] Copy pair toggle failed - Pair {pair_id} not found')
+            add_system_log('warning', f'âš ï¸ [404] Copy pair toggle failed - Pair {pair_id} not found')
             return jsonify({'error': 'Pair not found'}), 404
 
     except Exception as e:
@@ -1108,12 +1102,12 @@ def add_master_to_pair(pair_id):
     '''
     เพิ่ม Master Account เข้าไปในคู่ที่มีอยู่แล้ว
     จะใช้ API key เดียวกันกับคู่เดิม
-
+    
     Request Body:
     {
         "master_account": "9999888"
     }
-
+    
     Response:
     {
         "success": true,
@@ -1123,45 +1117,45 @@ def add_master_to_pair(pair_id):
     try:
         data = request.get_json() or {}
         master_account = str(data.get('master_account', '')).strip()
-
+        
         if not master_account:
-            add_system_log('error', ' [400] Add master failed - Account number required')
+            add_system_log('error', '❌ [400] Add master failed - Account number required')
             return jsonify({'error': 'Master account is required'}), 400
-
+        
         # ตรวจสอบว่า account มีอยู่ใน session_manager หรือไม่
         if not session_manager.account_exists(master_account):
-            add_system_log('error', f' [404] Add master failed - Account {master_account} not found')
+            add_system_log('error', f'❌ [404] Add master failed - Account {master_account} not found')
             return jsonify({'error': f'Master account {master_account} not found'}), 404
-
+        
         # ดึงข้อมูลคู่ที่มีอยู่
         pair = copy_manager.get_pair_by_id(pair_id)
         if not pair:
-            add_system_log('error', f' [404] Add master failed - Pair {pair_id} not found')
+            add_system_log('error', f'❌ [404] Add master failed - Pair {pair_id} not found')
             return jsonify({'error': 'Pair not found'}), 404
-
+        
         # ใช้ API key จากคู่เดิม
         api_key = pair.get('api_key') or pair.get('apiKey')
-
+        
         # ดึง slaves ทั้งหมดที่ใช้ API key เดียวกัน
-        existing_pairs = [p for p in copy_manager.pairs
+        existing_pairs = [p for p in copy_manager.pairs 
                          if (p.get('api_key') or p.get('apiKey')) == api_key]
-
+        
         if not existing_pairs:
-            add_system_log('error', f' [404] Add master failed - No existing pairs with API key')
+            add_system_log('error', f'❌ [404] Add master failed - No existing pairs with API key')
             return jsonify({'error': 'No existing pairs found with this API key'}), 404
-
+        
         # เอา slave แรกมาใช้ (สร้างคู่ใหม่ Master ใหม่ -> Slave เดิม)
         first_slave = existing_pairs[0].get('slave_account')
         settings = existing_pairs[0].get('settings', {})
-
+        
         # ตรวจสอบว่าคู่นี้มีอยู่แล้วหรือไม่
         for p in copy_manager.pairs:
-            if (p.get('master_account') == master_account and
+            if (p.get('master_account') == master_account and 
                 p.get('slave_account') == first_slave and
                 (p.get('api_key') or p.get('apiKey')) == api_key):
-                add_system_log('warning', f'️ [400] Add master failed - Pair already exists')
+                add_system_log('warning', f'⚠️ [400] Add master failed - Pair already exists')
                 return jsonify({'error': 'This master-slave pair already exists'}), 400
-
+        
         # สร้างคู่ใหม่ด้วย API key เดียวกัน
         new_pair = {
             'id': f"{master_account}_{first_slave}_{int(datetime.now().timestamp())}",
@@ -1173,11 +1167,11 @@ def add_master_to_pair(pair_id):
             'created': datetime.now().isoformat(),
             'updated': datetime.now().isoformat()
         }
-
+        
         # เพิ่มคู่ใหม่
         copy_manager.pairs.append(new_pair)
         copy_manager._save_pairs()
-
+        
         # อัพเดท API key mapping
         if hasattr(copy_manager, 'api_keys'):
             if api_key not in copy_manager.api_keys:
@@ -1190,15 +1184,15 @@ def add_master_to_pair(pair_id):
                 copy_manager.api_keys[api_key] = [old_id, new_pair['id']]
             if hasattr(copy_manager, '_save_api_keys'):
                 copy_manager._save_api_keys()
-
+        
         logger.info(f"[API] Added master {master_account} to pair group with API key {api_key[:8]}...")
-        add_system_log('success', f' [201] Master {master_account} added to pair {pair_id}')
-
+        add_system_log('success', f'✅ [201] Master {master_account} added to pair {pair_id}')
+        
         return jsonify({'success': True, 'pair': new_pair}), 201
-
+        
     except Exception as e:
         logger.error(f"[API] Add master to pair error: {e}")
-        add_system_log('error', f' [500] Add master failed: {str(e)}')
+        add_system_log('error', f'❌ [500] Add master failed: {str(e)}')
         return jsonify({'error': str(e)}), 500
 
 
@@ -1208,7 +1202,7 @@ def add_slave_to_pair(pair_id):
     '''
     เพิ่ม Slave Account เข้าไปในคู่ที่มีอยู่แล้ว
     จะใช้ API key เดียวกันกับคู่เดิม และใช้ settings ที่ระบุ
-
+    
     Request Body:
     {
         "slave_account": "5555444",
@@ -1220,7 +1214,7 @@ def add_slave_to_pair(pair_id):
             "multiplier": 3
         }
     }
-
+    
     Response:
     {
         "success": true,
@@ -1231,34 +1225,34 @@ def add_slave_to_pair(pair_id):
         data = request.get_json() or {}
         slave_account = str(data.get('slave_account', '')).strip()
         settings = data.get('settings', {})
-
+        
         if not slave_account:
-            add_system_log('error', ' [400] Add slave failed - Account number required')
+            add_system_log('error', '❌ [400] Add slave failed - Account number required')
             return jsonify({'error': 'Slave account is required'}), 400
-
+        
         # ตรวจสอบว่า account มีอยู่ใน session_manager หรือไม่
         if not session_manager.account_exists(slave_account):
-            add_system_log('error', f' [404] Add slave failed - Account {slave_account} not found')
+            add_system_log('error', f'❌ [404] Add slave failed - Account {slave_account} not found')
             return jsonify({'error': f'Slave account {slave_account} not found'}), 404
-
+        
         # ดึงข้อมูลคู่ที่มีอยู่
         pair = copy_manager.get_pair_by_id(pair_id)
         if not pair:
-            add_system_log('error', f' [404] Add slave failed - Pair {pair_id} not found')
+            add_system_log('error', f'❌ [404] Add slave failed - Pair {pair_id} not found')
             return jsonify({'error': 'Pair not found'}), 404
-
+        
         # ใช้ API key และ master จากคู่เดิม
         api_key = pair.get('api_key') or pair.get('apiKey')
         master_account = pair.get('master_account')
-
+        
         # ตรวจสอบว่าคู่นี้มีอยู่แล้วหรือไม่
         for p in copy_manager.pairs:
-            if (p.get('master_account') == master_account and
+            if (p.get('master_account') == master_account and 
                 p.get('slave_account') == slave_account and
                 (p.get('api_key') or p.get('apiKey')) == api_key):
-                add_system_log('warning', f'️ [400] Add slave failed - Pair already exists')
+                add_system_log('warning', f'⚠️ [400] Add slave failed - Pair already exists')
                 return jsonify({'error': 'This master-slave pair already exists'}), 400
-
+        
         # สร้างคู่ใหม่สำหรับ Slave ตัวใหม่
         new_pair = {
             'id': f"{master_account}_{slave_account}_{int(datetime.now().timestamp())}",
@@ -1276,11 +1270,11 @@ def add_slave_to_pair(pair_id):
             'created': datetime.now().isoformat(),
             'updated': datetime.now().isoformat()
         }
-
+        
         # เพิ่มคู่ใหม่
         copy_manager.pairs.append(new_pair)
         copy_manager._save_pairs()
-
+        
         # อัพเดท API key mapping
         if hasattr(copy_manager, 'api_keys'):
             if api_key not in copy_manager.api_keys:
@@ -1293,15 +1287,15 @@ def add_slave_to_pair(pair_id):
                 copy_manager.api_keys[api_key] = [old_id, new_pair['id']]
             if hasattr(copy_manager, '_save_api_keys'):
                 copy_manager._save_api_keys()
-
+        
         logger.info(f"[API] Added slave {slave_account} to pair group with API key {api_key[:8]}...")
-        add_system_log('success', f' [201] Slave {slave_account} added to pair {pair_id}')
-
+        add_system_log('success', f'✅ [201] Slave {slave_account} added to pair {pair_id}')
+        
         return jsonify({'success': True, 'pair': new_pair}), 201
-
+        
     except Exception as e:
         logger.error(f"[API] Add slave to pair error: {e}")
-        add_system_log('error', f' [500] Add slave failed: {str(e)}')
+        add_system_log('error', f'❌ [500] Add slave failed: {str(e)}')
         return jsonify({'error': str(e)}), 500
 
 
@@ -1331,7 +1325,7 @@ def copy_trade_endpoint():
         action = data.get('action', 'UNKNOWN')
         symbol = data.get('symbol', '-')
         account = data.get('account', '-')
-        add_system_log('info', f' [200] Copy signal received: {action} {symbol} from {account}')
+        add_system_log('info', f'ðŸ“¡ [200] Copy signal received: {action} {symbol} from {account}')
 
         # 3) Basic validation
         api_key = str(data.get('api_key', '')).strip()
@@ -1399,7 +1393,7 @@ def copy_trade_endpoint():
             except Exception as _e:
                 logger.warning(f"[COPY_TRADE] Prefix-normalized scan error: {_e}")
 
-
+        
         #    Fallback #2: try api_keys mapping with normalized prefixes
         if not copy_pair:
             try:
@@ -1419,7 +1413,7 @@ def copy_trade_endpoint():
                 logger.warning(f"[COPY_TRADE] api_keys normalized fallback error: {_e}")
 
         if not copy_pair:
-            add_system_log('error', ' [401] Copy trade unauthorized - Invalid API key')
+            add_system_log('error', 'ðŸ”’ [401] Copy trade unauthorized - Invalid API key')
             return jsonify({'error': 'Invalid API key'}), 401
 
         # 5) Normalize important fields
@@ -1428,19 +1422,19 @@ def copy_trade_endpoint():
         status         = copy_pair.get('status', 'active')
 
         if status != 'active':
-            add_system_log('warning', f'  [400] Copy trade rejected - Pair inactive ({master_account} → {slave_account})')
+            add_system_log('warning', f'âš ï¸ [400] Copy trade rejected - Pair inactive ({master_account} â†’ {slave_account})')
             return jsonify({'error': 'Copy pair is inactive'}), 400
 
         # 6) Confirm that signal is from the correct master
         account_in_signal = str(data.get('account', '')).strip()
         if account_in_signal != master_account:
-            add_system_log('error', f' [400] Copy trade rejected - Account mismatch (got:{account_in_signal}, expected:{master_account})')
+            add_system_log('error', f'âŒ [400] Copy trade rejected - Account mismatch (got:{account_in_signal}, expected:{master_account})')
             return jsonify({'error': 'Account number does not match master account'}), 400
 
-        # 7) (Optional) Check slave online — keep original behavior
+        # 7) (Optional) Check slave online â€” keep original behavior
         try:
             if hasattr(session_manager, 'is_instance_alive') and not session_manager.is_instance_alive(slave_account):
-                add_system_log('warning', f'  [400] Copy trade failed - Slave {slave_account} offline')
+                add_system_log('warning', f'âš ï¸ [400] Copy trade failed - Slave {slave_account} offline')
                 return jsonify({'error': f'Slave account {slave_account} is offline'}), 400
         except Exception as _e:
             logger.warning(f"[COPY_TRADE] is_instance_alive check failed: {_e}")
@@ -1454,7 +1448,7 @@ def copy_trade_endpoint():
         action = data.get('action', 'UNKNOWN')
         symbol = data.get('symbol', '-')
         volume = data.get('volume', '-')
-        add_system_log('success', f' [200] Copy trade executed: {master_account} → {slave_account} ({action} {symbol} Vol:{volume})')
+        add_system_log('success', f'âœ… [200] Copy trade executed: {master_account} â†’ {slave_account} ({action} {symbol} Vol:{volume})')
         return jsonify({
             'success': True,
             'message': f'Command sent to slave account {slave_account}',
@@ -1464,13 +1458,13 @@ def copy_trade_endpoint():
 
     except Exception as e:
         logger.error(f"[COPY_TRADE_ERROR] {e}", exc_info=True)
-        add_system_log('error', f' [500] Copy trade error: {str(e)[:80]}')
+        add_system_log('error', f'âŒ [500] Copy trade error: {str(e)[:80]}')
         return jsonify({'error': str(e)}), 500
 
 @app.get('/api/copy/history')
 @session_login_required
 def get_copy_history():
-    """ดึงประวัติารคัดลอ"""
+    """à¸”à¸¶à¸‡à¸›à¸£à¸°à¸§à¸±à¸•à¸´à¸à¸²à¸£à¸„à¸±à¸”à¸¥à¸­à¸"""
     try:
         limit = int(request.args.get('limit', 100))
         status = request.args.get('status')
@@ -1489,20 +1483,20 @@ def get_copy_history():
 @app.post('/api/copy/history/clear')
 @session_login_required
 def clear_copy_history():
-    """ลบประวัติารคัดลอทั้งหมด"""
+    """à¸¥à¸šà¸›à¸£à¸°à¸§à¸±à¸•à¸´à¸à¸²à¸£à¸„à¸±à¸”à¸¥à¸­à¸à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”"""
     try:
         confirm = request.args.get('confirm')
         if confirm != '1':
-            add_system_log('warning', '  [400] Clear history failed - Missing confirmation')
+            add_system_log('warning', 'âš ï¸ [400] Clear history failed - Missing confirmation')
             return jsonify({'error': 'Missing confirm=1'}), 400
 
         success = copy_history.clear_history()
 
         if success:
-            add_system_log('warning', '️ [200] Copy history cleared')
+            add_system_log('warning', 'ðŸ—‘ï¸ [200] Copy history cleared')
             return jsonify({'success': True})
         else:
-            add_system_log('error', ' [500] Failed to clear copy history')
+            add_system_log('error', 'âŒ [500] Failed to clear copy history')
             return jsonify({'error': 'Failed to clear history'}), 500
 
     except Exception as e:
@@ -1513,19 +1507,19 @@ def clear_copy_history():
 @app.post('/copy-history/clear')
 @session_login_required
 def clear_copy_history_legacy():
-    """Backward-compat: รองรับเส้นทางเ่า /copy-history/clear"""
+    """Backward-compat: à¸£à¸­à¸‡à¸£à¸±à¸šà¹€à¸ªà¹‰à¸™à¸—à¸²à¸‡à¹€à¸à¹ˆà¸² /copy-history/clear"""
     try:
         confirm = request.args.get('confirm')
         if confirm != '1':
-            add_system_log('warning', '  [400] Clear history failed - Missing confirmation')
+            add_system_log('warning', 'âš ï¸ [400] Clear history failed - Missing confirmation')
             return jsonify({'error': 'Missing confirm=1'}), 400
 
         success = copy_history.clear_history()
         if success:
-            add_system_log('warning', '️ [200] Copy history cleared')
+            add_system_log('warning', 'ðŸ—‘ï¸ [200] Copy history cleared')
             return jsonify({'success': True})
         else:
-            add_system_log('error', ' [500] Failed to clear copy history')
+            add_system_log('error', 'âŒ [500] Failed to clear copy history')
             return jsonify({'error': 'Failed to clear history'}), 500
     except Exception as e:
         logger.error(f"[API] Legacy clear copy history error: {e}")
@@ -1537,7 +1531,7 @@ def clear_copy_history_legacy():
 
 @app.get('/events/copy-trades')
 def sse_copy_trades():
-    """Server-Sent Events stream สำหรับ Copy Trading history"""
+    """Server-Sent Events stream à¸ªà¸³à¸«à¸£à¸±à¸š Copy Trading history"""
     from flask import Response, stream_with_context
 
     client_queue = queue.Queue(maxsize=256)
@@ -1580,82 +1574,12 @@ def sse_copy_trades():
 # SETTINGS API (added after Copy Trading API, before __main__)
 # ==================================================================================
 
-# Global settings storage (ใช้ไฟล์ JSON ทน database)
+# Global settings storage (à¹ƒà¸Šà¹‰à¹„à¸Ÿà¸¥à¹Œ JSON à¹à¸—à¸™ database)
 SETTINGS_FILE = 'data/settings.json'
-# ===== Custom Rate Limiter (ไม่ต้อง Restart Server) =====
-rate_limit_store = {}
-
-def check_custom_rate_limit(key: str, limit_str: str) -> bool:
-    """
-    เช็ค rate limit แบบ manual
-    Args:
-        key: identifier (เช่น "webhook:127.0.0.1")
-        limit_str: "10 per minute", "100 per hour", "1000 per day"
-    Returns:
-        True = allowed, False = exceeded
-    """
-    try:
-        parts = limit_str.lower().split()
-        if len(parts) != 3 or parts[1] != 'per':
-            logger.warning(f"[RATE_LIMIT] Invalid format: {limit_str}")
-            return True  # fail-open
-        
-        max_requests = int(parts[0])
-        period = parts[2]
-        
-        period_seconds = {
-            'minute': 60,
-            'hour': 3600,
-            'day': 86400
-        }.get(period, 60)
-        
-        now = time.time()
-        
-        if key not in rate_limit_store:
-            rate_limit_store[key] = []
-        
-        # ลบ timestamps ที่หมดอายุ
-        rate_limit_store[key] = [
-            ts for ts in rate_limit_store[key] 
-            if now - ts < period_seconds
-        ]
-        
-        # เช็คว่าเกิน limit หรือไม่
-        if len(rate_limit_store[key]) >= max_requests:
-            logger.warning(
-                f"[RATE_LIMIT] Exceeded {key}: "
-                f"{len(rate_limit_store[key])}/{max_requests} in {limit_str}"
-            )
-            return False
-        
-        rate_limit_store[key].append(now)
-        return True
-        
-    except Exception as e:
-        logger.error(f"[RATE_LIMIT] Error: {e}")
-        return True  # fail-open
-
-
-def get_webhook_rate_limit() -> str:
-    """ดึงค่า webhook rate limit จาก settings"""
-    try:
-        settings = load_settings()
-        return settings.get('rate_limits', {}).get('webhook', '10 per minute')
-    except Exception:
-        return '10 per minute'
-
-
-def get_api_rate_limit() -> str:
-    """ดึงค่า API rate limit จาก settings"""
-    try:
-        settings = load_settings()
-        return settings.get('rate_limits', {}).get('api', '100 per hour')
-    except Exception:
-        return '100 per hour'
 
 
 def load_settings():
-    """โหลด settings จาไฟล์"""
+    """à¹‚à¸«à¸¥à¸” settings à¸ˆà¸²à¸à¹„à¸Ÿà¸¥à¹Œ"""
     try:
         if os.path.exists(SETTINGS_FILE):
             with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
@@ -1684,7 +1608,7 @@ def load_settings():
 
 
 def save_settings(settings_data):
-    """บันทึ settings ลงไฟล์"""
+    """à¸šà¸±à¸™à¸—à¸¶à¸ settings à¸¥à¸‡à¹„à¸Ÿà¸¥à¹Œ"""
     try:
         os.makedirs('data', exist_ok=True)
         with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
@@ -1699,7 +1623,7 @@ def save_settings(settings_data):
 @app.get('/api/settings')
 @session_login_required
 def get_all_settings():
-    """ดึง settings ทั้งหมด"""
+    """à¸”à¸¶à¸‡ settings à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”"""
     try:
         settings = load_settings()
         return jsonify(settings), 200
@@ -1711,7 +1635,7 @@ def get_all_settings():
 @app.post('/api/settings/rate-limits')
 @session_login_required
 def save_rate_limit_settings():
-    """บันทึ Rate Limit Settings"""
+    """à¸šà¸±à¸™à¸—à¸¶à¸ Rate Limit Settings"""
     try:
         data = request.get_json() or {}
         webhook_limit = data.get('webhook', '').strip()
@@ -1724,15 +1648,15 @@ def save_rate_limit_settings():
         import re
         pattern = r'^\d+\s+per\s+(minute|hour|day)$'
         if not re.match(pattern, webhook_limit, re.IGNORECASE):
-            add_system_log('error', f' [400] Rate limit update failed - Invalid webhook format: {webhook_limit}')
+            add_system_log('error', f'âŒ [400] Rate limit update failed - Invalid webhook format: {webhook_limit}')
             return jsonify({'error': 'Invalid webhook rate limit format'}), 400
         if not re.match(pattern, api_limit, re.IGNORECASE):
-            add_system_log('error', f' [400] Rate limit update failed - Invalid API format: {api_limit}')
+            add_system_log('error', f'âŒ [400] Rate limit update failed - Invalid API format: {api_limit}')
             return jsonify({'error': 'Invalid API rate limit format'}), 400
 
         # Load current settings
         settings = load_settings()
-
+        
         # Update rate limits
         settings['rate_limits'] = {
             'webhook': webhook_limit,
@@ -1743,16 +1667,9 @@ def save_rate_limit_settings():
         # Save settings
         if save_settings(settings):
             logger.info(f"[SETTINGS] Rate limits updated: webhook={webhook_limit}, api={api_limit}")
-            add_system_log('info', f' [200] Rate limits updated - Webhook: {webhook_limit}, API: {api_limit}')
-            
-            # ล้าง rate limit store เพื่อให้ค่าใหม่มีผลทันที
-            global rate_limit_store
-            rate_limit_store.clear()
-            logger.info("[RATE_LIMIT] Rate limit store cleared - new limits active immediately")
-            
+            add_system_log('info', f'âš™ï¸ [200] Rate limits updated - Webhook: {webhook_limit}, API: {api_limit}')
             return jsonify({
                 'success': True,
-                'message': 'Rate limit settings saved! Changes are active immediately (no restart needed)',
                 'rate_limits': settings['rate_limits']
             }), 200
         else:
@@ -1766,16 +1683,16 @@ def save_rate_limit_settings():
 @app.get('/api/settings/email')
 @session_login_required
 def get_email_settings():
-    """ดึง Email Settings"""
+    """à¸”à¸¶à¸‡ Email Settings"""
     try:
         settings = load_settings()
         email_settings = settings.get('email', {})
-
-        # ไม่ส่ง password ลับไปให้ frontend
+        
+        # à¹„à¸¡à¹ˆà¸ªà¹ˆà¸‡ password à¸à¸¥à¸±à¸šà¹„à¸›à¹ƒà¸«à¹‰ frontend
         email_settings_safe = email_settings.copy()
         if 'smtp_pass' in email_settings_safe:
             email_settings_safe['smtp_pass'] = '********' if email_settings.get('smtp_pass') else ''
-
+        
         return jsonify(email_settings_safe), 200
     except Exception as e:
         logger.error(f"[SETTINGS_API] Error getting email settings: {e}")
@@ -1785,10 +1702,10 @@ def get_email_settings():
 @app.post('/api/settings/email')
 @session_login_required
 def save_email_settings():
-    """บันทึ Email Settings"""
+    """à¸šà¸±à¸™à¸—à¸¶à¸ Email Settings"""
     try:
         data = request.get_json() or {}
-
+        
         enabled = data.get('enabled', False)
         smtp_server = data.get('smtp_server', '').strip()
         smtp_port = data.get('smtp_port', 587)
@@ -1800,21 +1717,21 @@ def save_email_settings():
         # Validate if enabled
         if enabled:
             if not smtp_server or not smtp_user or not from_email:
-                add_system_log('error', ' [400] Email config failed - Missing required fields')
+                add_system_log('error', 'âŒ [400] Email config failed - Missing required fields')
                 return jsonify({'error': 'Missing required email configuration'}), 400
-
+            
             if not to_emails or len(to_emails) == 0:
-                add_system_log('error', ' [400] Email config failed - No recipients specified')
+                add_system_log('error', 'âŒ [400] Email config failed - No recipients specified')
                 return jsonify({'error': 'At least one recipient email is required'}), 400
 
         # Load current settings
         settings = load_settings()
-
+        
         # Get existing password if new password is not provided or is masked
         existing_email = settings.get('email', {})
         if smtp_pass == '********' or not smtp_pass:
             smtp_pass = existing_email.get('smtp_pass', '')
-
+        
         # Update email settings
         settings['email'] = {
             'enabled': enabled,
@@ -1839,11 +1756,11 @@ def save_email_settings():
                 email_handler.to_emails = to_emails
             except Exception as handler_error:
                 logger.warning(f"[SETTINGS] Could not update email_handler: {handler_error}")
-
+            
             logger.info(f"[SETTINGS] Email settings updated: enabled={enabled}")
             status = "enabled" if enabled else "disabled"
             recipients = len(to_emails)
-            add_system_log('info', f' [200] Email {status} - Server: {smtp_server}:{smtp_port}, Recipients: {recipients}')
+            add_system_log('info', f'ðŸ“§ [200] Email {status} - Server: {smtp_server}:{smtp_port}, Recipients: {recipients}')
             return jsonify({'success': True}), 200
         else:
             return jsonify({'error': 'Failed to save settings'}), 500
@@ -1856,16 +1773,16 @@ def save_email_settings():
 @app.post('/api/settings/email/test')
 @session_login_required
 def test_email_settings():
-    """ทดสอบส่ง Email"""
+    """à¸—à¸”à¸ªà¸­à¸šà¸ªà¹ˆà¸‡ Email"""
     try:
         settings = load_settings()
         email_settings = settings.get('email', {})
-
+        
         if not email_settings.get('enabled'):
-            add_system_log('warning', '  [400] Test email failed - Email notifications not enabled')
+            add_system_log('warning', 'âš ï¸ [400] Test email failed - Email notifications not enabled')
             return jsonify({'error': 'Email is not enabled'}), 400
-
-        # อัปเดต email_handler ด้วย settings ปัจจุบัน
+        
+        # à¸­à¸±à¸›à¹€à¸”à¸• email_handler à¸”à¹‰à¸§à¸¢ settings à¸›à¸±à¸ˆà¸ˆà¸¸à¸šà¸±à¸™
         try:
             email_handler.enabled = email_settings.get('enabled', False)
             email_handler.smtp_server = email_settings.get('smtp_server', 'smtp.gmail.com')
@@ -1875,23 +1792,23 @@ def test_email_settings():
             email_handler.to_emails = email_settings.get('to_emails', [])
         except Exception as handler_error:
             logger.warning(f"[SETTINGS] Could not update email_handler: {handler_error}")
-
-        # ส่ง test email
+        
+        # à¸ªà¹ˆà¸‡ test email
         test_subject = "MT5 Trading Bot - Test Email"
         test_message = f"This is a test email sent at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\nIf you receive this email, your email configuration is working correctly!"
-
-        # เรียใช้ฟัง์ชันส่ง email
+        
+        # à¹€à¸£à¸µà¸¢à¸à¹ƒà¸Šà¹‰à¸Ÿà¸±à¸‡à¸à¹Œà¸Šà¸±à¸™à¸ªà¹ˆà¸‡ email
         success = _email_send_alert(test_subject, test_message)
-
+        
         if success:
             logger.info("[SETTINGS] Test email sent successfully")
             recipients = len(email_settings.get('to_emails', []))
-            add_system_log('success', f' [200] Test email sent successfully to {recipients} recipient(s)')
+            add_system_log('success', f'ðŸ“§ [200] Test email sent successfully to {recipients} recipient(s)')
             return jsonify({'success': True, 'message': 'Test email sent'}), 200
         else:
-            add_system_log('error', ' [500] Test email failed - Check SMTP configuration')
+            add_system_log('error', 'âŒ [500] Test email failed - Check SMTP configuration')
             return jsonify({'error': 'Failed to send test email'}), 500
-
+            
     except Exception as e:
         logger.error(f"[SETTINGS_API] Error testing email: {e}")
         return jsonify({'error': str(e)}), 500
@@ -1900,10 +1817,10 @@ def test_email_settings():
 
 
 # ==================================================================================
-# SYSTEM LOGS API (สำหรับสดง logs ในหน้า System Information)
+# SYSTEM LOGS API (à¸ªà¸³à¸«à¸£à¸±à¸šà¹à¸ªà¸”à¸‡ logs à¹ƒà¸™à¸«à¸™à¹‰à¸² System Information)
 # ==================================================================================
 
-# System Logs Storage (In-Memory, จำัด 300 entries)
+# System Logs Storage (In-Memory, à¸ˆà¸³à¸à¸±à¸” 300 entries)
 system_logs = []
 MAX_SYSTEM_LOGS = 300
 system_logs_lock = threading.Lock()
@@ -1913,7 +1830,7 @@ sse_system_lock = threading.Lock()
 
 def add_system_log(log_type, message):
     """
-    เพิ่ม system log ใหม่
+    à¹€à¸žà¸´à¹ˆà¸¡ system log à¹ƒà¸«à¸¡à¹ˆ
     log_type: 'info', 'success', 'warning', 'error'
     """
     with system_logs_lock:
@@ -1923,24 +1840,24 @@ def add_system_log(log_type, message):
             'message': message or '',
             'timestamp': datetime.now().isoformat()
         }
-
-        # เพิ่มที่หน้าสุด (ล่าสุดอยู่บนสุด)
+        
+        # à¹€à¸žà¸´à¹ˆà¸¡à¸—à¸µà¹ˆà¸«à¸™à¹‰à¸²à¸ªà¸¸à¸” (à¸¥à¹ˆà¸²à¸ªà¸¸à¸”à¸­à¸¢à¸¹à¹ˆà¸šà¸™à¸ªà¸¸à¸”)
         system_logs.insert(0, log_entry)
-
-        # จำัดจำนวน logs
+        
+        # à¸ˆà¸³à¸à¸±à¸”à¸ˆà¸³à¸™à¸§à¸™ logs
         if len(system_logs) > MAX_SYSTEM_LOGS:
             system_logs.pop()
-
-        # ส่งไปยัง SSE clients
+        
+        # à¸ªà¹ˆà¸‡à¹„à¸›à¸¢à¸±à¸‡ SSE clients
         _broadcast_system_log(log_entry)
-
+        
         return log_entry
 
 
 def _broadcast_system_log(log_entry):
-    """ส่ง log ไปยัง SSE clients ทั้งหมด"""
+    """à¸ªà¹ˆà¸‡ log à¹„à¸›à¸¢à¸±à¸‡ SSE clients à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”"""
     data = f"data: {json.dumps(log_entry)}\n\n"
-
+    
     with sse_system_lock:
         dead_clients = []
         for client_queue in sse_system_clients:
@@ -1950,8 +1867,8 @@ def _broadcast_system_log(log_entry):
                 dead_clients.append(client_queue)
             except Exception:
                 dead_clients.append(client_queue)
-
-        # ลบ clients ที่ตาย
+        
+        # à¸¥à¸š clients à¸—à¸µà¹ˆà¸•à¸²à¸¢
         for client in dead_clients:
             try:
                 sse_system_clients.remove(client)
@@ -1962,14 +1879,14 @@ def _broadcast_system_log(log_entry):
 @app.get('/api/system/logs')
 @session_login_required
 def get_system_logs():
-    """ดึง system logs"""
+    """à¸”à¸¶à¸‡ system logs"""
     try:
         limit = int(request.args.get('limit', 300))
         limit = max(1, min(limit, MAX_SYSTEM_LOGS))
-
+        
         with system_logs_lock:
             logs = system_logs[:limit]
-
+        
         return jsonify({
             'success': True,
             'logs': logs,
@@ -1983,13 +1900,13 @@ def get_system_logs():
 @app.post('/api/system/logs/clear')
 @session_login_required
 def clear_system_logs():
-    """ล้าง system logs ทั้งหมด"""
+    """à¸¥à¹‰à¸²à¸‡ system logs à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”"""
     try:
         with system_logs_lock:
             system_logs.clear()
-
+        
         add_system_log('info', 'System logs cleared')
-
+        
         return jsonify({'success': True}), 200
     except Exception as e:
         logger.error(f"[SYSTEM_LOGS] Error clearing logs: {e}")
@@ -1998,60 +1915,60 @@ def clear_system_logs():
 
 @app.get('/events/system-logs')
 def sse_system_logs():
-    """Server-Sent Events stream สำหรับ real-time system logs"""
+    """Server-Sent Events stream à¸ªà¸³à¸«à¸£à¸±à¸š real-time system logs"""
     from flask import Response, stream_with_context
-
+    
     client_queue = queue.Queue(maxsize=256)
-
+    
     with sse_system_lock:
         sse_system_clients.append(client_queue)
-
+    
     last_beat = time.time()
     HEARTBEAT_SECS = 20
-
+    
     def gen():
         nonlocal last_beat
         try:
             yield "retry: 3000\n\n"
-
-            # ส่ง initial message
+            
+            # à¸ªà¹ˆà¸‡ initial message
             init_msg = {
                 'type': 'info',
                 'message': 'Connected to system logs stream',
                 'timestamp': datetime.now().isoformat()
             }
             yield f"data: {json.dumps(init_msg)}\n\n"
-
+            
             while True:
                 try:
                     now = time.time()
                     if now - last_beat >= HEARTBEAT_SECS:
                         last_beat = now
                         yield ": keep-alive\n\n"
-
+                    
                     msg = client_queue.get(timeout=1.0)
                     yield msg
-
+                    
                 except queue.Empty:
                     continue
-
+                    
         finally:
             with sse_system_lock:
                 try:
                     sse_system_clients.remove(client_queue)
                 except:
                     pass
-
+    
     headers = {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache, no-transform",
         "X-Accel-Buffering": "no",
     }
-
+    
     return Response(stream_with_context(gen()), headers=headers)
 
 
-# เพิ่ม initial logs เมื่อ server เริ่มทำงาน
+# à¹€à¸žà¸´à¹ˆà¸¡ initial logs à¹€à¸¡à¸·à¹ˆà¸­ server à¹€à¸£à¸´à¹ˆà¸¡à¸—à¸³à¸‡à¸²à¸™
 add_system_log('info', 'System started successfully')
 add_system_log('success', 'Connected to MT5 server')
 add_system_log('info', 'Webhook endpoint initialized')
@@ -2063,5 +1980,9 @@ add_system_log('info', 'Monitoring active connections')
 
 # =================== main ===================
 if __name__ == '__main__':
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s'
+    )
     app.logger.setLevel(logging.INFO)
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', '5000')))
