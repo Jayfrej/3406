@@ -69,6 +69,54 @@ class SessionManager:
             ).fetchone()
             return row is not None
 
+    # ⭐ Added: Get symbol info (placed after account_exists and before update_account_status)
+    def get_symbol_info(self, account: str, symbol: str) -> Optional[Dict]:
+        """
+        ดึงข้อมูล Symbol จาก MT5 instance รวมถึง Contract Size
+
+        Args:
+            account: หมายเลขบัญชี
+            symbol: Symbol ที่ต้องการดึงข้อมูล
+
+        Returns:
+            Dict หรือ None: {
+                'volume_min': float,
+                'volume_max': float,
+                'volume_step': float,
+                'trade_contract_size': float  # ⭐ Contract Size สำหรับคำนวณ Tick Value
+            }
+        """
+        try:
+            instance_path = self.get_instance_path(account)
+            if not instance_path:
+                logger.warning(f"[SESSION_MANAGER] Cannot find instance for account {account}")
+                return None
+
+            # รองรับทั้งโหมด portable (Data/MQL5/Files) และโครงสร้างเดิม (MQL5/Files)
+            fname = f"symbol_info_{symbol}.json"
+            primary_path = os.path.join(instance_path, "Data", "MQL5", "Files", fname)
+            fallback_path = os.path.join(instance_path, "MQL5", "Files", fname)
+            symbol_info_file = primary_path if os.path.exists(primary_path) else fallback_path
+
+            if os.path.exists(symbol_info_file):
+                with open(symbol_info_file, 'r', encoding='utf-8') as f:
+                    symbol_data = json.load(f)
+                logger.debug(f"[SESSION_MANAGER] Symbol info for {symbol}: {symbol_data}")
+                return symbol_data
+            else:
+                # ถ้าไม่มีไฟล์ ให้คืนค่า default
+                logger.warning(f"[SESSION_MANAGER] Symbol info file not found for {symbol}, using defaults")
+                return {
+                    'volume_min': 0.01,
+                    'volume_max': 100.0,
+                    'volume_step': 0.01,
+                    'trade_contract_size': 0.0  # ⚠️ ไม่รู้ค่าจริง
+                }
+
+        except Exception as e:
+            logger.error(f"[SESSION_MANAGER] Failed to get symbol info for {account}/{symbol}: {e}")
+            return None
+
     def update_account_status(self, account: str, status: str, pid: Optional[int] = None):
         with sqlite3.connect(self.db_path) as conn:
             if pid is not None:
