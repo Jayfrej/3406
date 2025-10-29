@@ -636,7 +636,7 @@ Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
                 # ✅ กรณีมี order_id → Modify ตาม Comment
                 if order_id:
                     command = {
-                        'action': 'modify_position',
+                        'action': 'modify',
                         'comment': copy_comment,
                         'symbol': slave_symbol,
                         'take_profit': new_tp,
@@ -656,7 +656,7 @@ Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
                     
                     # Modify ทั้ง Symbol
                     command = {
-                        'action': 'modify_position',
+                        'action': 'modify',
                         'symbol': slave_symbol,
                         'take_profit': new_tp,
                         'stop_loss': new_sl
