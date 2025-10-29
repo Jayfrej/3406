@@ -621,34 +621,51 @@ Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
             elif event in ['position_modify', 'modify']:
                 logger.info(f"[COPY_HANDLER] Processing MODIFY ORDER event")
                 
-                if copy_psl and order_id:
+                # ดึงค่า TP/SL ใหม่
+                new_tp = (
+                    float(signal_data.get('tp', 0)) 
+                    if signal_data.get('tp') is not None 
+                    else None
+                )
+                new_sl = (
+                    float(signal_data.get('sl', 0)) 
+                    if signal_data.get('sl') is not None 
+                    else None
+                )
+                
+                # ✅ กรณีมี order_id → Modify ตาม Comment
+                if order_id:
                     command = {
                         'action': 'modify_position',
                         'comment': copy_comment,
                         'symbol': slave_symbol,
-                        'take_profit': (
-                            float(signal_data.get('tp', 0)) 
-                            if signal_data.get('tp') is not None 
-                            else None
-                        ),
-                        'stop_loss': (
-                            float(signal_data.get('sl', 0)) 
-                            if signal_data.get('sl') is not None 
-                            else None
-                        )
+                        'take_profit': new_tp,
+                        'stop_loss': new_sl
                     }
                     logger.info(
-                        f"[COPY_HANDLER] ✅ MODIFY Command created: "
-                        f"Comment: {copy_comment} | TP: {command.get('take_profit')} | "
-                        f"SL: {command.get('stop_loss')}"
+                        f"[COPY_HANDLER] ✅ MODIFY Command created (by Comment): "
+                        f"Comment: {copy_comment} | TP: {new_tp} | SL: {new_sl}"
                     )
                     return command
+                
+                # ✅ กรณีไม่มี order_id → Fallback
                 else:
                     if not copy_psl:
-                        logger.info(f"[COPY_HANDLER] copyPSL is disabled, ignoring MODIFY event")
-                    if not order_id:
-                        logger.warning(f"[COPY_HANDLER] No order_id provided, cannot modify")
-                    return None
+                        logger.info(f"[COPY_HANDLER] ⚠️ copyPSL disabled and no order_id, skipping")
+                        return None
+                    
+                    # Modify ทั้ง Symbol
+                    command = {
+                        'action': 'modify_position',
+                        'symbol': slave_symbol,
+                        'take_profit': new_tp,
+                        'stop_loss': new_sl
+                    }
+                    logger.warning(
+                        f"[COPY_HANDLER] ⚠️ No order_id, modifying all {slave_symbol} positions | "
+                        f"TP: {new_tp} | SL: {new_sl}"
+                    )
+                    return command
             
             # --- UNKNOWN EVENT ---
             logger.warning(f"[COPY_HANDLER] ⚠️ Unknown event type: {event}")
