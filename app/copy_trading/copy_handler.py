@@ -172,29 +172,23 @@ class CopyHandler:
         """
         matching_pairs = []
         
-        # วิธีที่ 1: ใช้ api_keys mapping (ถ้ามี)
-        if hasattr(self.copy_manager, 'api_keys'):
-            pair_ids = self.copy_manager.api_keys.get(api_key)
-            
-            # ถ้า pair_ids เป็น list (กรณีมีหลาย pairs)
-            if isinstance(pair_ids, list):
-                for pair_id in pair_ids:
-                    pair = self.copy_manager.get_pair(pair_id)
-                    if pair:
-                        matching_pairs.append(pair)
-            
-            # ถ้า pair_ids เป็น string เดี่ยว
-            elif isinstance(pair_ids, str):
-                pair = self.copy_manager.get_pair(pair_ids)
-                if pair:
-                    matching_pairs.append(pair)
-        
-        # วิธีที่ 2: ค้นหาทุก pairs (fallback)
-        if not matching_pairs:
+        try:
+            # ค้นหาทุก pairs จาก CopyManager
             all_pairs = self.copy_manager.get_all_pairs()
+            
+            # กรองเฉพาะ pairs ที่ใช้ API key นี้
             for pair in all_pairs:
-                if pair.get('api_token') == api_key:
+                if pair.get('api_token') == api_key or pair.get('apiToken') == api_key:
                     matching_pairs.append(pair)
+                    logger.debug(f"[COPY_HANDLER] Found pair {pair.get('id')} with matching API key")
+            
+            if matching_pairs:
+                logger.info(f"[COPY_HANDLER] Found {len(matching_pairs)} pair(s) with API key {api_key[:8]}...")
+            else:
+                logger.warning(f"[COPY_HANDLER] No pairs found with API key {api_key[:8]}...")
+                
+        except Exception as e:
+            logger.error(f"[COPY_HANDLER] Error finding pairs by API key: {e}", exc_info=True)
         
         return matching_pairs
     
