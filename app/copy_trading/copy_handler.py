@@ -89,6 +89,7 @@ class CopyHandler:
             # ============================================================
             success_count = 0
             failed_count = 0
+            skipped_count = 0
             results = []
             
             for pair in valid_pairs:
@@ -98,8 +99,9 @@ class CopyHandler:
                     # แปลง Signal เป็น Command สำหรับ Slave นี้
                     slave_command = self._convert_signal_to_command(signal_data, pair)
                     if not slave_command:
-                        logger.warning(f"[COPY_HANDLER] Failed to convert signal for slave {slave_account}")
-                        failed_count += 1
+                        # ⭐ ถ้า None แสดงว่า skip โดยตั้งใจ (เช่น copy_psl = False ใน MODIFY event)
+                        logger.info(f"[COPY_HANDLER] ⚠️ Skipped slave {slave_account} (command not applicable)")
+                        skipped_count += 1
                         continue
                     
                     # ส่งคำสั่งไปยัง Slave นี้
@@ -136,16 +138,19 @@ class CopyHandler:
             total_slaves = len(valid_pairs)
             logger.info(
                 f"[COPY_HANDLER] ✅ Signal processed: "
-                f"{success_count}/{total_slaves} successful, {failed_count}/{total_slaves} failed"
+                f"{success_count}/{total_slaves} successful, "
+                f"{failed_count}/{total_slaves} failed, "
+                f"{skipped_count}/{total_slaves} skipped"
             )
             
             return {
                 'success': success_count > 0,
                 'slaves_processed': success_count,
                 'slaves_failed': failed_count,
+                'slaves_skipped': skipped_count,
                 'total_slaves': total_slaves,
                 'results': results,
-                'message': f'Sent to {success_count}/{total_slaves} slaves'
+                'message': f'Sent to {success_count}/{total_slaves} slaves ({skipped_count} skipped)'
             }
         
         except Exception as e:
@@ -305,6 +310,11 @@ class CopyHandler:
             # EVENT: MODIFY ORDER
             elif event in ['position_modify', 'order_modify']:
                 logger.info(f"[COPY_HANDLER] Processing MODIFY ORDER event")
+                
+                # ⭐ เช็ค copy_psl ก่อนว่าจะคัดลอก TP/SL หรือไม่
+                if not copy_psl:
+                    logger.info(f"[COPY_HANDLER] ⚠️ Copy TP/SL is DISABLED, skipping MODIFY event")
+                    return None
                 
                 new_tp = signal_data.get('tp')
                 new_sl = signal_data.get('sl')
