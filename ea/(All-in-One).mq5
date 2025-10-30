@@ -1005,6 +1005,11 @@ bool ProcessSlaveFile(const string base, const string pattern, bool delete_flag)
       if(sym == "") sym = GetVal(js, "symbol");
       if(sym == "") sym = GetVal(js, "original_symbol");
 
+      
+      // === Auto-export symbol info immediately after resolving ===
+      string realSym = ResolveSymbol(sym);
+      ExportSymbolInfo(realSym);  // ⭐ Export ทันทีที่ได้รับคำสั่ง!
+      LogMessage(LOG_DEBUG, "[SLAVE] Exported symbol info for: " + realSym);
       string action = ToLower(GetVal(js, "action"));
       if(action == "long") action = "buy";
       if(action == "short") action = "sell";
