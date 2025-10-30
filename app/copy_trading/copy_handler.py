@@ -178,7 +178,13 @@ class CopyHandler:
             
             # กรองเฉพาะ pairs ที่ใช้ API key นี้
             for pair in all_pairs:
-                if pair.get('api_token') == api_key or pair.get('apiToken') == api_key:
+                # ตรวจสอบทุก key ที่เป็นไปได้: api_key, apiKey, api_token, token
+                pair_api_key = (pair.get('api_key') or 
+                               pair.get('apiKey') or 
+                               pair.get('api_token') or 
+                               pair.get('token'))
+                
+                if pair_api_key == api_key:
                     matching_pairs.append(pair)
                     logger.debug(f"[COPY_HANDLER] Found pair {pair.get('id')} with matching API key")
             
