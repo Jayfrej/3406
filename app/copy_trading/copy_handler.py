@@ -1,7 +1,7 @@
 """
 Copy Trading Handler - FIXED VERSION
 แก้ไขให้ส่งคำสั่งไปทุก Slave ที่เชื่อมกับ Master เดียวกัน
-Version: 3.2 - Enhanced Logging for Volume Calculation
+Version: 3.1 - Multiple Slaves Support
 """
 
 import logging
@@ -22,7 +22,7 @@ class CopyHandler:
         from .balance_helper import BalanceHelper
         self.balance_helper = BalanceHelper(session_manager)
 
-        logger.info("[COPY_HANDLER] Initialized (v3.2 - Enhanced Volume Logging)")
+        logger.info("[COPY_HANDLER] Initialized (v3.1 - Multiple Slaves Support)")
     
     def process_master_signal(self, api_key: str, signal_data: Dict) -> Dict:
         """
@@ -172,90 +172,80 @@ class CopyHandler:
         """
         matching_pairs = []
         
-        try:
-            # ค้นหาทุก pairs จาก CopyManager
-            all_pairs = self.copy_manager.get_all_pairs()
+        # วิธีที่ 1: ใช้ api_keys mapping (ถ้ามี)
+        if hasattr(self.copy_manager, 'api_keys'):
+            pair_ids = self.copy_manager.api_keys.get(api_key)
             
-            # กรองเฉพาะ pairs ที่ใช้ API key นี้
-            for pair in all_pairs:
-                # ตรวจสอบทุก key ที่เป็นไปได้: api_key, apiKey, api_token, token
-                pair_api_key = (pair.get('api_key') or 
-                               pair.get('apiKey') or 
-                               pair.get('api_token') or 
-                               pair.get('token'))
-                
+            # ถ้า pair_ids เป็น list (กรณีมีหลาย pairs)
+            if isinstance(pair_ids, list):
+                for pair_id in pair_ids:
+                    pair = self.copy_manager.get_pair_by_id(pair_id)
+                    if pair:
+                        matching_pairs.append(pair)
+            # ถ้า pair_ids เป็น string (กรณีมี pair เดียว)
+            elif isinstance(pair_ids, str):
+                pair = self.copy_manager.get_pair_by_id(pair_ids)
+                if pair:
+                    matching_pairs.append(pair)
+        
+        # วิธีที่ 2: Fallback - สแกนทุก pairs โดยตรง
+        if not matching_pairs:
+            for pair in self.copy_manager.pairs:
+                pair_api_key = pair.get('api_key') or pair.get('apiKey')
                 if pair_api_key == api_key:
                     matching_pairs.append(pair)
-                    logger.debug(f"[COPY_HANDLER] Found pair {pair.get('id')} with matching API key")
-            
-            if matching_pairs:
-                logger.info(f"[COPY_HANDLER] Found {len(matching_pairs)} pair(s) with API key {api_key[:8]}...")
-            else:
-                logger.warning(f"[COPY_HANDLER] No pairs found with API key {api_key[:8]}...")
-                
-        except Exception as e:
-            logger.error(f"[COPY_HANDLER] Error finding pairs by API key: {e}", exc_info=True)
         
         return matching_pairs
     
+    # ============================================================
+    # ฟังก์ชันเดิมที่ไม่ต้องแก้ (เก็บไว้ทั้งหมด)
+    # ============================================================
+    
     def _convert_signal_to_command(self, signal_data: Dict, pair: Dict) -> Optional[Dict]:
         """
-        แปลง Signal จาก Master เป็น Command สำหรับ Slave
-        
-        🔥 ENHANCED: เพิ่ม Logging ที่ละเอียดขึ้นสำหรับการคำนวณ Volume
-        
-        Args:
-            signal_data: ข้อมูล Signal จาก Master
-            pair: ข้อมูล Copy Pair
-            
-        Returns:
-            Dict หรือ None: Command สำหรับ Slave หรือ None ถ้าไม่ควร copy
+        แปลงสัญญาณจาก Master เป็นคำสั่งสำหรับ Slave
+        [เก็บโค้ดเดิมทั้งหมด - ไม่ต้องแก้]
         """
         try:
-            # Extract data
-            master_account = str(signal_data.get('account', ''))
-            slave_account = pair.get('slave_account')
-            event = signal_data.get('event', '').lower()
-            master_symbol = signal_data.get('symbol', '')
-            trade_type = str(signal_data.get('type', 'BUY')).upper()
-            order_id = signal_data.get('order_id')
-            
             settings = pair.get('settings', {})
-            auto_map_volume = settings.get('auto_map_volume', True)
-            copy_psl = settings.get('copy_psl', True)
             
-            # 🔥 ENHANCED: Log การตั้งค่าที่สำคัญ
+            # ✅ Normalize keys - รองรับทั้ง True และ False
+            # ใช้ if-else แทน or เพื่อให้ False ทำงานได้ถูกต้อง
+            auto_map_symbol = (settings.get('auto_map_symbol') 
+                             if 'auto_map_symbol' in settings 
+                             else settings.get('autoMapSymbol', True))
+            auto_map_volume = (settings.get('auto_map_volume') 
+                             if 'auto_map_volume' in settings 
+                             else settings.get('autoMapVolume', True))
+            copy_psl = (settings.get('copy_psl') 
+                       if 'copy_psl' in settings 
+                       else settings.get('copyPSL', True))
+            
+            # ดึงข้อมูลพื้นฐาน
+            event = str(signal_data.get('event', '')).lower()
+            master_symbol = str(signal_data.get('symbol', ''))
+            trade_type = str(signal_data.get('type', '')).upper()
+            volume = float(signal_data.get('volume', 0))
+            order_id = signal_data.get('order_id', '')
+            
             logger.info(
-                f"[COPY_HANDLER] 🔧 Settings for Pair {pair.get('id')}:\n"
-                f"  auto_map_volume: {auto_map_volume}\n"
-                f"  volume_mode: {settings.get('volume_mode', 'multiply')}\n"
-                f"  multiplier: {settings.get('multiplier', 1.0)}\n"
-                f"  copy_psl: {copy_psl}"
+                f"[COPY_HANDLER] Converting signal: "
+                f"event={event} | symbol={master_symbol} | type={trade_type} | "
+                f"volume={volume} | order_id={order_id}"
             )
             
-            # 1. Auto Mapping Symbol
+            # 1. Map Symbol
             slave_symbol = master_symbol
-            if settings.get('auto_map_symbol', True):
-                mapped = self.symbol_mapper.map_symbol(master_symbol)
-                if mapped and mapped != master_symbol:
-                    slave_symbol = mapped
-                    logger.info(f"[COPY_HANDLER] Symbol mapped: {master_symbol} → {slave_symbol}")
+            if auto_map_symbol:
+                mapped_symbol = self.symbol_mapper.map_symbol(master_symbol)
+                if mapped_symbol:
+                    logger.info(f"[COPY_HANDLER] Symbol mapped: {master_symbol} → {mapped_symbol}")
+                    slave_symbol = mapped_symbol
             
             # 2. Calculate Volume
-            volume = float(signal_data.get('volume', 0.01))
-            original_volume = volume
+            slave_account = pair.get('slave_account')
+            master_account = pair.get('master_account')
             
-            # 🔥 ENHANCED: Log ก่อนคำนวณ Volume
-            logger.info(
-                f"[COPY_HANDLER] 📊 Volume Calculation Started:\n"
-                f"  Master Volume: {volume}\n"
-                f"  Master Symbol: {master_symbol}\n"
-                f"  Slave Symbol: {slave_symbol}\n"
-                f"  Master Account: {master_account}\n"
-                f"  Slave Account: {slave_account}"
-            )
-            
-            # คำนวณ Volume
             volume = self._calculate_slave_volume(
                 master_volume=volume,
                 settings=settings,
@@ -263,19 +253,6 @@ class CopyHandler:
                 symbol=slave_symbol,
                 master_account=master_account,
                 master_symbol=master_symbol
-            )
-            
-            # 🔥 ENHANCED: Log หลังคำนวณ Volume
-            if original_volume > 0:
-                adjustment_pct = ((volume/original_volume - 1) * 100)
-            else:
-                adjustment_pct = 0
-                
-            logger.info(
-                f"[COPY_HANDLER] 📊 Volume Calculation Result:\n"
-                f"  Original Volume: {original_volume}\n"
-                f"  Calculated Volume: {volume}\n"
-                f"  Adjustment: {adjustment_pct:+.2f}%"
             )
             
             # 3. Generate Comment
@@ -291,7 +268,7 @@ class CopyHandler:
                 command = {
                     'action': trade_type,
                     'symbol': slave_symbol,
-                    'volume': volume,  # ✅ Volume ที่คำนวณแล้ว
+                    'volume': volume,
                     'order_type': 'market',
                     'comment': copy_comment
                 }
@@ -377,45 +354,25 @@ class CopyHandler:
     ) -> float:
         """
         คำนวณ Volume สำหรับ Slave ตาม settings
-        
-        🔥 ENHANCED: เพิ่ม Logging ที่ชัดเจนขึ้นในทุกขั้นตอน
-        
-        Modes:
-        - fixed: ใช้ค่า multiplier เป็น volume คงที่
-        - percent: คำนวณจาก balance ratio × multiplier
-        - multiply: master_volume × multiplier (รองรับ Tick Value Auto-Detection)
-        
-        Tick Value Auto-Detection:
-        - ทำงานเฉพาะใน multiply mode + auto_map_volume = True
-        - ปรับ volume ให้มูลค่าเท่ากันเมื่อ tick value ต่างกัน
+        [เก็บโค้ดเดิมทั้งหมด - ไม่ต้องแก้]
         """
         try:
             volume_mode = settings.get('volume_mode', 'multiply').lower()
             multiplier = float(settings.get('multiplier', 1.0))
             auto_map_volume = settings.get('auto_map_volume', True)
             
-            logger.info(
-                f"[COPY_HANDLER] 🔧 Volume Calculation Mode:\n"
-                f"  Mode: {volume_mode}\n"
-                f"  Multiplier: {multiplier}\n"
-                f"  Auto Map Volume: {auto_map_volume}\n"
-                f"  Master Volume: {master_volume}"
-            )
+            logger.info(f"[COPY_HANDLER] Volume Mode: {volume_mode} | Multiplier: {multiplier}")
             
-            # ============================================================
-            # MODE 1: FIXED VOLUME
-            # ============================================================
+            # FIXED MODE
             if volume_mode == 'fixed':
                 volume = multiplier
-                logger.info(f"[COPY_HANDLER] ✅ FIXED mode: Volume = {volume}")
+                logger.info(f"[COPY_HANDLER] Using fixed volume: {volume}")
                 return volume
             
-            # ============================================================
-            # MODE 2: PERCENT (Balance-Based)
-            # ============================================================
+            # PERCENT MODE
             elif volume_mode == 'percent':
                 if not master_account or not slave_account:
-                    logger.warning("[COPY_HANDLER] ⚠️ Missing account info for percent mode, using multiply fallback")
+                    logger.warning("[COPY_HANDLER] Missing account info for percent mode")
                     return master_volume * multiplier
                 
                 master_balance = self.balance_helper.get_account_balance(master_account)
@@ -425,30 +382,20 @@ class CopyHandler:
                     ratio = slave_balance / master_balance
                     volume = master_volume * ratio * multiplier
                     logger.info(
-                        f"[COPY_HANDLER] ✅ PERCENT mode:\n"
-                        f"  Master Balance: ${master_balance:.2f}\n"
-                        f"  Slave Balance: ${slave_balance:.2f}\n"
-                        f"  Balance Ratio: {ratio:.4f}\n"
-                        f"  Calculation: {master_volume} × {ratio:.4f} × {multiplier} = {volume:.4f}"
+                        f"[COPY_HANDLER] Percent mode: "
+                        f"Master: ${master_balance:.2f} | Slave: ${slave_balance:.2f} | "
+                        f"Ratio: {ratio:.4f} | Volume: {volume:.2f}"
                     )
                     return volume
                 else:
-                    logger.warning("[COPY_HANDLER] ⚠️ Cannot get balances, using multiply fallback")
+                    logger.warning("[COPY_HANDLER] Cannot get balances, using multiplier")
                     return master_volume * multiplier
             
-            # ============================================================
-            # MODE 3: MULTIPLY (with Tick Value Auto-Detection)
-            # ============================================================
+            # MULTIPLY MODE (with Tick Value Auto-Detection)
             else:
-                logger.info(f"[COPY_HANDLER] 📊 MULTIPLY mode activated")
-                
-                # 🔥 Tick Value Auto-Detection
-                # เงื่อนไข: auto_map_volume = True + master_symbol ≠ slave_symbol
+                # Tick Value Auto-Detection
                 if auto_map_volume and master_symbol and master_symbol != symbol:
-                    logger.info(
-                        f"[COPY_HANDLER] 🔥 Tick Value Auto-Detection:\n"
-                        f"  Checking symbols: {master_symbol} vs {symbol}"
-                    )
+                    logger.info("[COPY_HANDLER] 🔥 Tick Value Auto-Detection enabled")
                     
                     master_info = self.balance_helper.session_manager.get_symbol_info(
                         master_account, master_symbol
@@ -464,50 +411,21 @@ class CopyHandler:
                         master_tick = float(master_info['trade_contract_size'])
                         slave_tick = float(slave_info['trade_contract_size'])
                         
-                        logger.info(
-                            f"[COPY_HANDLER] 📊 Tick Value Info:\n"
-                            f"  Master ({master_symbol}): {master_tick}\n"
-                            f"  Slave ({symbol}): {slave_tick}"
-                        )
-                        
-                        if master_tick != slave_tick and master_tick > 0 and slave_tick > 0:
-                            # ✅ Tick Value ต่างกัน → ปรับ Volume
-                            tick_ratio = master_tick / slave_tick
-                            volume = master_volume * tick_ratio * multiplier
-                            
+                        if master_tick != slave_tick:
+                            ratio = master_tick / slave_tick
+                            volume = master_volume * ratio * multiplier
                             logger.info(
-                                f"[COPY_HANDLER] ✅ TICK VALUE ADJUSTED:\n"
-                                f"  Tick Ratio: {tick_ratio:.4f}\n"
-                                f"  Calculation: {master_volume} × {tick_ratio:.4f} × {multiplier} = {volume:.4f}\n"
-                                f"  Trade Value (Master): ${master_volume * master_tick:.2f}\n"
-                                f"  Trade Value (Slave): ${volume * slave_tick:.2f}"
+                                f"[COPY_HANDLER] ✅ Tick Value adjusted: "
+                                f"Master: {master_tick} | Slave: {slave_tick} | "
+                                f"Ratio: {ratio:.4f} | Volume: {volume:.4f}"
                             )
                             return volume
-                        else:
-                            logger.info(
-                                f"[COPY_HANDLER] ℹ️ Tick Values are equal or invalid, "
-                                f"using standard multiply"
-                            )
-                    else:
-                        logger.warning(
-                            f"[COPY_HANDLER] ⚠️ Cannot get symbol info for tick value detection:\n"
-                            f"  Master info: {bool(master_info)}\n"
-                            f"  Slave info: {bool(slave_info)}"
-                        )
-                elif not auto_map_volume:
-                    logger.info(f"[COPY_HANDLER] ℹ️ Auto Map Volume is OFF, using standard multiply")
-                elif master_symbol == symbol:
-                    logger.info(f"[COPY_HANDLER] ℹ️ Same symbols ({symbol}), using standard multiply")
                 
-                # Standard Multiply (fallback)
+                # Standard multiply
                 volume = master_volume * multiplier
-                logger.info(
-                    f"[COPY_HANDLER] ✅ Standard MULTIPLY:\n"
-                    f"  Calculation: {master_volume} × {multiplier} = {volume}"
-                )
+                logger.info(f"[COPY_HANDLER] Multiply mode: {master_volume} × {multiplier} = {volume}")
                 return volume
                 
         except Exception as e:
-            logger.error(f"[COPY_HANDLER] ❌ Error calculating volume: {e}", exc_info=True)
-            logger.info(f"[COPY_HANDLER] Using fallback: master_volume = {master_volume}")
+            logger.error(f"[COPY_HANDLER] Error calculating volume: {e}", exc_info=True)
             return master_volume
