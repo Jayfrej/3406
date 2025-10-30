@@ -1,6 +1,8 @@
 """
 Copy Trading Manager
 จัดการ Copy Pairs, API Keys, และการตั้งค่า
+
+Version: 2.0 - Multiple Pairs per API Key Support
 """
 
 import os
@@ -77,18 +79,75 @@ class CopyManager:
             if api_key not in self.api_keys:
                 return api_key
     
-    def validate_api_key(self, api_key: str) -> Optional[Dict]:
-        """ตรวจสอบ API Key และคืนค่าข้อมูล Pair"""
-        pair_id = self.api_keys.get(api_key)
-        if pair_id:
-            for pair in self.pairs:
-                if pair.get('id') == pair_id:
-                    return pair
-        return None
+    def validate_api_key(self, api_key: str) -> Optional[List[Dict]]:
+        """
+        ตรวจสอบ API Key และคืนค่าข้อมูล Pairs ทั้งหมดที่ใช้ API Key นี้
+        
+        🔥 แก้ไขจากเดิม: คืนค่าเป็น List[Dict] แทน Dict เพื่อรองรับหลาย Pairs
+        
+        Returns:
+            List[Dict]: รายการ Pairs ทั้งหมดที่ตรงกับ API Key
+            None: ถ้าไม่พบ API Key
+        """
+        # ตรวจสอบจาก api_keys.json ก่อน (รองรับทั้ง string และ list)
+        pair_ids = self.api_keys.get(api_key)
+        
+        if pair_ids:
+            # ถ้าเป็น list ของ pair_ids
+            if isinstance(pair_ids, list):
+                found_pairs = []
+                for pair_id in pair_ids:
+                    for pair in self.pairs:
+                        if pair.get('id') == pair_id:
+                            found_pairs.append(pair)
+                return found_pairs if found_pairs else None
+            
+            # ถ้าเป็น string เดียว (backward compatibility)
+            else:
+                for pair in self.pairs:
+                    if pair.get('id') == pair_ids:
+                        return [pair]  # คืนเป็น list เพื่อความสอดคล้อง
+        
+        # Fallback: ค้นหาจาก pairs โดยตรง
+        found_pairs = []
+        for pair in self.pairs:
+            if pair.get('api_key') == api_key:
+                found_pairs.append(pair)
+        
+        return found_pairs if found_pairs else None
     
-    def get_pair_by_api_key(self, api_key: str) -> Optional[Dict]:
-        """ดึงข้อมูล Pair จาก API Key"""
+    def get_pair_by_api_key(self, api_key: str) -> Optional[List[Dict]]:
+        """
+        ดึงข้อมูล Pairs จาก API Key
+        
+        🔥 แก้ไขจากเดิม: คืนค่าเป็น List[Dict]
+        """
         return self.validate_api_key(api_key)
+    
+    def get_pair_for_master(self, api_key: str, master_account: str) -> Optional[Dict]:
+        """
+        ดึง Pair ที่ตรงกับ API Key และ Master Account
+        
+        🆕 ฟังก์ชันใหม่: ใช้สำหรับการ copy trade ที่ต้องการเลือก pair เฉพาะ master
+        
+        Args:
+            api_key: API Key
+            master_account: หมายเลขบัญชี Master
+            
+        Returns:
+            Dict: Pair ที่ตรงกับ master_account
+            None: ถ้าไม่พบ
+        """
+        pairs = self.validate_api_key(api_key)
+        if not pairs:
+            return None
+        
+        # หา pair ที่ master_account ตรงกัน
+        for pair in pairs:
+            if str(pair.get('master_account')) == str(master_account):
+                return pair
+        
+        return None
     
     # =================== Pair Management ===================
     
@@ -180,6 +239,7 @@ class CopyManager:
             return False
     
     def delete_pair(self, pair_id: str) -> bool:
+        """ลบ Copy Pair"""
         try:
             pair_id = str(pair_id)
             pair = self.get_pair_by_id(pair_id)
@@ -187,14 +247,31 @@ class CopyManager:
                 return False
 
             api_key = pair.get('api_key') or pair.get('apiKey')
+            
+            # อัพเดท api_keys mapping
             if api_key and api_key in self.api_keys:
-                del self.api_keys[api_key]
+                # ถ้าเป็น list
+                if isinstance(self.api_keys[api_key], list):
+                    self.api_keys[api_key] = [
+                        pid for pid in self.api_keys[api_key] if pid != pair_id
+                    ]
+                    # ถ้าไม่เหลือ pair แล้ว ลบ key ออก
+                    if not self.api_keys[api_key]:
+                        del self.api_keys[api_key]
+                # ถ้าเป็น string
+                else:
+                    if self.api_keys[api_key] == pair_id:
+                        del self.api_keys[api_key]
+                
                 self._save_api_keys()
 
+            # ลบ pair
             self.pairs = [p for p in self.pairs if str(p.get('id')) != pair_id]
             self._save_pairs()
+            
             logger.info(f"[COPY_MANAGER] Deleted pair: {pair_id}")
             return True
+            
         except Exception as e:
             logger.exception(f"[COPY_MANAGER] delete_pair error: {e}")
             return False
