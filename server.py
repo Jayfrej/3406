@@ -1302,10 +1302,16 @@ def add_slave_to_pair(pair_id):
 # =================== Copy Trading Signal Endpoint ===================
 
 
+
 @app.post('/api/copy/trade')
 @limiter.limit("100 per minute")
 def copy_trade_endpoint():
-    """Receive trading signal from Master EA (Copy Trading)"""
+    """
+    Receive trading signal from Master EA (Copy Trading)
+
+    🆕 Version 2.0: รองรับ Multiple Pairs ต่อ API Key
+    ใช้ copy_handler.process_master_signal() เพื่อ handle logic ทั้งหมด
+    """
     try:
         # 1) Log raw payload
         raw_data = request.get_data(as_text=True)
@@ -1322,145 +1328,51 @@ def copy_trade_endpoint():
             return jsonify({'error': 'Invalid JSON'}), 400
 
         logger.info(f"[COPY_TRADE] Parsed data: {json.dumps(data)}")
-        action = data.get('action', 'UNKNOWN')
+
+        # 3) Log event summary
+        action = data.get('event', 'UNKNOWN')
         symbol = data.get('symbol', '-')
         account = data.get('account', '-')
-        add_system_log('info', f'ðŸ“¡ [200] Copy signal received: {action} {symbol} from {account}')
+        add_system_log('info', f'📡 [200] Copy signal received: {action} {symbol} from {account}')
 
-        # 3) Basic validation
+        # 4) Basic validation
         api_key = str(data.get('api_key', '')).strip()
         if not api_key:
+            add_system_log('error', '❌ [400] Copy trade failed - API key missing')
             return jsonify({'error': 'api_key is required'}), 400
 
-        # Debug: list known tokens
-        try:
-            pairs_preview = []
-            for p in getattr(copy_manager, 'pairs', []) or []:
-                pairs_preview.append({
-                    'id': p.get('id'),
-                    'master': p.get('master_account') or p.get('masterAccount'),
-                    'slave': p.get('slave_account') or p.get('slaveAccount'),
-                    'tokens': [
-                        str(p.get('api_key', '')).strip(),
-                        str(p.get('apiKey', '')).strip(),
-                        str(p.get('api_token', '')).strip(),
-                        str(p.get('token', '')).strip(),
-                    ]
-                })
-            logger.debug("[COPY_TRADE] Known pairs tokens: [REDACTED]")
-            keys_map = getattr(copy_manager, 'api_keys', {}) or {}
-            logger.debug(f"[COPY_TRADE] Known api_keys count: {len(keys_map)}")
-        except Exception as _e:
-            logger.warning(f"[COPY_TRADE] Debug api_keys list error: {_e}")
-
-        # 4) Resolve Copy Pair from API key
-        #    First, try CopyManager validation (mapping api_keys.json -> pair_id)
-        copy_pair = None
-        if hasattr(copy_manager, 'validate_api_key'):
-            try:
-                copy_pair = copy_manager.validate_api_key(api_key)
-            except Exception as _e:
-                logger.warning(f"[COPY_TRADE] validate_api_key error: {_e}")
-
-        #    Fallback: directly scan pairs list for fields: api_key/apiKey/api_token/token
-        if not copy_pair:
-            try:
-                for p in getattr(copy_manager, 'pairs', []) or []:
-                    tokens = [
-                        str(p.get('api_key', '')).strip(),
-                        str(p.get('apiKey', '')).strip(),
-                        str(p.get('api_token', '')).strip(),
-                        str(p.get('token', '')).strip(),
-                    ]
-                    if api_key and api_key in tokens:
-                        copy_pair = p
-                        break
-            except Exception as _e:
-                logger.warning(f"[COPY_TRADE] Fallback pair scan error: {_e}")
-
-        if not copy_pair:
-            # Last fallback: normalize common prefixes (tk_/ctk_)
-            norm_key = api_key.replace('tk_', '').replace('ctk_', '')
-            try:
-                for p in getattr(copy_manager, 'pairs', []) or []:
-                    for field in ['api_key', 'apiKey', 'api_token', 'token']:
-                        v = str(p.get(field, '')).strip()
-                        if v and (v == api_key or v.replace('tk_', '').replace('ctk_', '') == norm_key):
-                            copy_pair = p
-                            break
-                    if copy_pair:
-                        break
-            except Exception as _e:
-                logger.warning(f"[COPY_TRADE] Prefix-normalized scan error: {_e}")
-
-        
-        #    Fallback #2: try api_keys mapping with normalized prefixes
-        if not copy_pair:
-            try:
-                keys_map = getattr(copy_manager, 'api_keys', {}) or {}
-                norm_key = api_key.replace('tk_', '').replace('ctk_', '')
-                for k, pair_id in keys_map.items():
-                    k_norm = str(k).replace('tk_', '').replace('ctk_', '')
-                    if k == api_key or k_norm == norm_key:
-                        # resolve pair by id
-                        for p in getattr(copy_manager, 'pairs', []) or []:
-                            if str(p.get('id', '')) == str(pair_id):
-                                copy_pair = p
-                                break
-                    if copy_pair:
-                        break
-            except Exception as _e:
-                logger.warning(f"[COPY_TRADE] api_keys normalized fallback error: {_e}")
-
-        if not copy_pair:
-            add_system_log('error', 'ðŸ”’ [401] Copy trade unauthorized - Invalid API key')
-            return jsonify({'error': 'Invalid API key'}), 401
-
-        # 5) Normalize important fields
-        slave_account  = str(copy_pair.get('slave_account') or copy_pair.get('slaveAccount') or '').strip()
-        master_account = str(copy_pair.get('master_account') or copy_pair.get('masterAccount') or '').strip()
-        status         = copy_pair.get('status', 'active')
-
-        if status != 'active':
-            add_system_log('warning', f'âš ï¸ [400] Copy trade rejected - Pair inactive ({master_account} â†’ {slave_account})')
-            return jsonify({'error': 'Copy pair is inactive'}), 400
-
-        # 6) Confirm that signal is from the correct master
-        account_in_signal = str(data.get('account', '')).strip()
-        if account_in_signal != master_account:
-            add_system_log('error', f'âŒ [400] Copy trade rejected - Account mismatch (got:{account_in_signal}, expected:{master_account})')
-            return jsonify({'error': 'Account number does not match master account'}), 400
-
-        # 7) (Optional) Check slave online â€” keep original behavior
-        try:
-            if hasattr(session_manager, 'is_instance_alive') and not session_manager.is_instance_alive(slave_account):
-                add_system_log('warning', f'âš ï¸ [400] Copy trade failed - Slave {slave_account} offline')
-                return jsonify({'error': f'Slave account {slave_account} is offline'}), 400
-        except Exception as _e:
-            logger.warning(f"[COPY_TRADE] is_instance_alive check failed: {_e}")
-
-        # 8) Delegate to CopyHandler to process + execute
+        # 5) 🔥 ใช้ copy_handler แทน - มันจะ handle ทุกอย่างเอง
+        #    - ตรวจสอบ API Key
+        #    - เลือก Pair ตาม Master Account
+        #    - ตรวจสอบ Slave status
+        #    - แปลง Signal เป็น Command
+        #    - ส่งคำสั่งไปยัง Slave
         result = copy_handler.process_master_signal(api_key, data)
-        if not result or not result.get('success'):
-            return jsonify({'error': (result or {}).get('error', 'Processing failed')}), 500
 
-        mapping = result.get('mapping', {})
-        action = data.get('action', 'UNKNOWN')
+        if not result or not result.get('success'):
+            error_msg = (result or {}).get('error', 'Processing failed')
+            add_system_log('error', f'❌ [500] Copy trade failed: {error_msg}')
+            return jsonify({'error': error_msg}), 500
+
+        # 6) Success!
+        master_account = data.get('account', '-')
         symbol = data.get('symbol', '-')
         volume = data.get('volume', '-')
-        add_system_log('success', f'âœ… [200] Copy trade executed: {master_account} â†’ {slave_account} ({action} {symbol} Vol:{volume})')
+
+        add_system_log(
+            'success', 
+            f'✅ [200] Copy trade executed: {master_account} → Slave ({action} {symbol} Vol:{volume})'
+        )
+
         return jsonify({
             'success': True,
-            'message': f'Command sent to slave account {slave_account}',
-            'slave_account': slave_account,
-            'mapping': mapping
+            'message': 'Copy trade executed successfully'
         }), 200
 
     except Exception as e:
         logger.error(f"[COPY_TRADE_ERROR] {e}", exc_info=True)
-        add_system_log('error', f'âŒ [500] Copy trade error: {str(e)[:80]}')
+        add_system_log('error', f'❌ [500] Copy trade error: {str(e)[:80]}')
         return jsonify({'error': str(e)}), 500
-
 @app.get('/api/copy/history')
 @session_login_required
 def get_copy_history():
