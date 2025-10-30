@@ -279,8 +279,9 @@ class CopyHandler:
                 logger.info(f"[COPY_HANDLER] Processing CLOSE ORDER event")
                 
                 if order_id:
+                    # ⭐ ใช้ action: "close" แทน "close_by_comment" เพื่อให้ EA รู้จัก
                     command = {
-                        'action': 'close_by_comment',
+                        'action': 'close',
                         'comment': copy_comment,
                         'symbol': slave_symbol
                     }
