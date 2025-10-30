@@ -236,11 +236,7 @@ class CopyHandler:
             # 1. Auto Mapping Symbol
             slave_symbol = master_symbol
             if settings.get('auto_map_symbol', True):
-                mapped = self.symbol_mapper.map_symbol(
-                    master_symbol,
-                    from_account=master_account,
-                    to_account=slave_account
-                )
+                mapped = self.symbol_mapper.map_symbol(master_symbol)
                 if mapped and mapped != master_symbol:
                     slave_symbol = mapped
                     logger.info(f"[COPY_HANDLER] Symbol mapped: {master_symbol} → {slave_symbol}")
