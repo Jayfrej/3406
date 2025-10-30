@@ -1,9 +1,10 @@
 """
 Copy Trading Handler
 รับและประมวลผลสัญญาณจาก Master EA
-Version: 3.0 - Tick Value Auto-Detection (Multiply Mode Only)
+Version: 3.1 - Multiple Pairs Support + Tick Value Auto-Detection
 
 🔥 การทำงาน:
+- รองรับ Multiple Pairs ต่อ API Key (เลือก Pair ตาม Master Account อัตโนมัติ)
 - Auto Mapping Volume = ON + Volume Mode = Multiply
   → ตรวจสอบ Tick Value อัตโนมัติ
   → ถ้า Tick Value ต่างกัน = ปรับ Volume ให้มูลค่าเท่ากัน
@@ -20,7 +21,7 @@ Version: 3.0 - Tick Value Auto-Detection (Multiply Mode Only)
 
 import logging
 from typing import Dict, Optional
-from datetime import datetime  # ⭐ เพิ่มสำหรับ timestamp ในอีเมล์
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -31,17 +32,19 @@ class CopyHandler:
         self.copy_manager = copy_manager
         self.symbol_mapper = symbol_mapper
         self.copy_executor = copy_executor
-        self.email_handler = email_handler  # ⭐ เพิ่ม email_handler
+        self.email_handler = email_handler
 
         # ✅ เพิ่ม BalanceHelper สำหรับ Percent Mode
         from .balance_helper import BalanceHelper
         self.balance_helper = BalanceHelper(session_manager)
 
-        logger.info("[COPY_HANDLER] Initialized (v3.0 - Tick Value Auto-Detection Enabled by Default)")
+        logger.info("[COPY_HANDLER] Initialized (v3.1 - Multiple Pairs + Tick Value Auto-Detection)")
     
     def process_master_signal(self, api_key: str, signal_data: Dict) -> Dict:
         """
         ประมวลผลสัญญาณจาก Master EA
+        
+        🆕 รองรับ Multiple Pairs: เลือก Pair ตาม Master Account อัตโนมัติ
         
         Args:
             api_key: API Key ของ Copy Pair
@@ -61,27 +64,23 @@ class CopyHandler:
         """
         pair: Optional[Dict] = None
         try:
-            # 1) ตรวจสอบ API Key และหา Pair
-            pair = self.copy_manager.validate_api_key(api_key)
+            # 1) 🔥 ตรวจสอบ API Key และหา Pair ที่ตรงกับ Master account
+            master_account = str(signal_data.get('account', ''))
+            pair = self.copy_manager.get_pair_for_master(api_key, master_account)
+            
             if not pair:
-                logger.warning(f"[COPY_HANDLER] Invalid API key: {api_key[:8]}...")
-                return {'success': False, 'error': 'Invalid API key'}
+                logger.warning(
+                    f"[COPY_HANDLER] Invalid API key or master account mismatch: "
+                    f"{api_key[:8]}... / {master_account}"
+                )
+                return {'success': False, 'error': 'Invalid API key or master account not found'}
             
             # 2) ตรวจสอบสถานะ Pair
             if pair.get('status') != 'active':
                 logger.info(f"[COPY_HANDLER] Pair {pair.get('id')} is inactive")
                 return {'success': False, 'error': 'Copy pair is inactive'}
             
-            # 3) ตรวจสอบว่าเป็น Master account จริงหรือไม่
-            master_account = str(signal_data.get('account', ''))
-            if master_account != pair.get('master_account'):
-                logger.warning(
-                    f"[COPY_HANDLER] Account mismatch: "
-                    f"received {master_account}, expected {pair.get('master_account')}"
-                )
-                return {'success': False, 'error': 'Master account mismatch'}
-            
-            # 4) ตรวจสอบว่า Slave account มีอยู่และเชื่อมต่อแล้ว
+            # 3) ตรวจสอบว่า Slave account มีอยู่และเชื่อมต่อแล้ว
             slave_account = pair.get('slave_account')
             if not self.balance_helper.session_manager.account_exists(slave_account):
                 logger.warning(f"[COPY_HANDLER] Slave account {slave_account} not found")
@@ -91,13 +90,13 @@ class CopyHandler:
                 logger.warning(f"[COPY_HANDLER] Slave account {slave_account} instance not alive")
                 return {'success': False, 'error': 'Slave account instance not running'}
             
-            # 5) แปลง Signal เป็น Command
+            # 4) แปลง Signal เป็น Command
             slave_command = self._convert_signal_to_command(signal_data, pair)
             if not slave_command:
                 logger.warning("[COPY_HANDLER] Failed to convert signal to command")
                 return {'success': False, 'error': 'Signal conversion failed'}
             
-            # 6) ส่งคำสั่งไปยัง Slave
+            # 5) ส่งคำสั่งไปยัง Slave
             logger.info(f"[COPY_HANDLER] Executing command on slave: {slave_account}")
             result = self.copy_executor.execute_on_slave(
                 slave_account=pair['slave_account'],
@@ -123,365 +122,7 @@ class CopyHandler:
             return {'success': False, 'error': str(e)}
     
     # ======================
-    #  Volume Calculation
-    # ======================
-    def _calculate_slave_volume(
-        self,
-        master_volume: float,
-        settings: Dict,
-        slave_account: str,
-        symbol: str,
-        master_account: str = None,
-        master_symbol: str = None
-    ) -> float:
-        """
-        คำนวณ Volume สำหรับ Slave ตาม settings
-        
-        🔥 TICK VALUE AUTO-DETECTION (เฉพาะ Multiply Mode):
-        - เมื่อ Auto Mapping Volume = ON + Volume Mode = Multiply
-          → ตรวจสอบ Tick Value อัตโนมัติ
-          → ถ้า Tick Value ต่างกัน = ปรับ Volume ให้มูลค่าเท่ากัน
-          → ถ้า Tick Value เท่ากัน = ใช้ Multiply ปกติ
-        
-        - Volume Mode = Fixed/Percent → ไม่ได้รับผลจาก Auto Mapping Volume
-        
-        Volume Modes:
-        - multiply: Master Volume × Multiplier (รองรับ Tick Value Auto)
-        - fixed: ใช้ค่าคงที่ (ไม่เกี่ยวกับ Auto Mapping Volume)
-        - percent: คำนวณจาก % ของ Balance (ไม่เกี่ยวกับ Auto Mapping Volume)
-        
-        Args:
-            master_volume: Volume จาก Master
-            settings: การตั้งค่า Pair
-            slave_account: หมายเลขบัญชี Slave
-            symbol: Symbol ที่จะเทรดบน Slave
-            master_account: หมายเลขบัญชี Master
-            master_symbol: Symbol ต้นฉบับจาก Master
-            
-        Returns:
-            float: Volume ที่คำนวณแล้ว
-        """
-        try:
-            volume_mode = settings.get('volume_mode') or settings.get('volumeMode', 'multiply')
-            multiplier = float(settings.get('multiplier', 2))
-            auto_map_volume = settings.get('auto_map_volume', True)
-            
-            # ตรวจสอบข้อมูล Symbol ของ Slave
-            symbol_info = self.balance_helper.session_manager.get_symbol_info(slave_account, symbol)
-            if not symbol_info:
-                logger.warning(f"[COPY_HANDLER] Cannot get symbol info for {symbol}, using master volume")
-                return max(master_volume, 0.01)
-            
-            min_lot = float(symbol_info.get('volume_min', 0.01))
-            max_lot = float(symbol_info.get('volume_max', 100.0))
-            lot_step = float(symbol_info.get('volume_step', 0.01))
-            
-            # 🔥 TICK VALUE AUTO-DETECTION
-            # เงื่อนไข: Auto Mapping Volume = ON + Volume Mode = Multiply + มีข้อมูล Master/Slave
-            if (auto_map_volume and 
-                volume_mode == 'multiply' and 
-                master_account and 
-                master_symbol):
-                
-                logger.info("[COPY_HANDLER] 🔥 Tick Value Auto-Detection enabled (Auto Mapping Volume = ON + Multiply Mode)")
-                
-                # ดึงข้อมูล Symbol ของ Master และ Slave
-                master_symbol_info = self.balance_helper.session_manager.get_symbol_info(
-                    master_account, 
-                    master_symbol
-                )
-                
-                if master_symbol_info and symbol_info:
-                    # ดึง Tick Value (contract size)
-                    master_tick_value = float(master_symbol_info.get('trade_contract_size', 0))
-                    slave_tick_value = float(symbol_info.get('trade_contract_size', 0))
-                    
-                    # ตรวจสอบว่า Tick Value ต่างกันหรือไม่
-                    if master_tick_value > 0 and slave_tick_value > 0 and master_tick_value != slave_tick_value:
-                        # ✅ Tick Value ต่างกัน → ปรับ Volume ให้มูลค่าเท่ากัน
-                        tick_ratio = master_tick_value / slave_tick_value
-                        calculated_volume = master_volume * tick_ratio
-                        
-                        logger.info(
-                            f"[COPY_HANDLER] ✅ TICK VALUE DETECTED (Different):\n"
-                            f"  Master: {master_symbol} | Tick Value = {master_tick_value} | Volume = {master_volume}\n"
-                            f"  Slave: {symbol} | Tick Value = {slave_tick_value}\n"
-                            f"  Ratio = {tick_ratio:.4f} | Calculated Volume = {calculated_volume:.2f}\n"
-                            f"  Trade Value: Master = ${master_volume * master_tick_value:.2f} | "
-                            f"Slave = ${calculated_volume * slave_tick_value:.2f}"
-                        )
-                        
-                        # ตรวจสอบขอบเขตและปัดเศษ
-                        calculated_volume = self._adjust_volume(calculated_volume, min_lot, max_lot, lot_step)
-                        
-                        logger.info(
-                            f"[COPY_HANDLER] 🎯 TICK VALUE AUTO-ADJUSTED: "
-                            f"{master_volume} → {calculated_volume} "
-                            f"(Equal Value: ${calculated_volume * slave_tick_value:.2f})"
-                        )
-                        
-                        return calculated_volume
-                    
-                    elif master_tick_value == slave_tick_value and master_tick_value > 0:
-                        # ℹ️ Tick Value เท่ากัน → ใช้ Multiply ปกติ
-                        logger.info(
-                            f"[COPY_HANDLER] ℹ️ Tick Values are EQUAL ({master_tick_value}), "
-                            f"using standard Multiply: {master_volume} × {multiplier}"
-                        )
-                    else:
-                        # ⚠️ ไม่มีข้อมูล Tick Value → ใช้ Multiply ปกติ
-                        logger.info(
-                            f"[COPY_HANDLER] ⚠️ Tick Value data incomplete, "
-                            f"using standard Multiply: {master_volume} × {multiplier}"
-                        )
-            
-            # 📌 STANDARD VOLUME MODES
-            # ใช้เมื่อ:
-            # 1. Auto Mapping Volume = OFF หรือ
-            # 2. Volume Mode = Fixed/Percent (ไม่เกี่ยวกับ Auto Mapping Volume) หรือ
-            # 3. Volume Mode = Multiply + Tick Values เท่ากัน หรือ
-            # 4. ไม่มีข้อมูล Master/Slave Symbol
-            
-            logger.info(f"[COPY_HANDLER] 📌 Using Volume Mode: {volume_mode}")
-            
-            if volume_mode == 'multiply':
-                # โหมด Multiply: Volume × Multiplier
-                calculated_volume = master_volume * multiplier
-                logger.info(f"[COPY_HANDLER] Multiply mode: {master_volume} × {multiplier} = {calculated_volume}")
-            
-            elif volume_mode == 'fixed':
-                # โหมด Fixed: ใช้ค่า Multiplier เป็น Volume คงที่
-                calculated_volume = multiplier
-                logger.info(f"[COPY_HANDLER] Fixed mode: Volume = {calculated_volume}")
-            
-            elif volume_mode == 'percent':
-                # โหมด Percent: คำนวณจาก % ของ Balance
-                balance = self.balance_helper.get_account_balance(slave_account)
-                if balance <= 0:
-                    logger.warning(f"[COPY_HANDLER] Cannot get balance for {slave_account}, using min lot")
-                    return min_lot
-                
-                risk_amount = balance * (multiplier / 100)
-                point_value = 10  # ค่าประมาณ
-                calculated_volume = risk_amount / (point_value * 100)
-                
-                logger.info(
-                    f"[COPY_HANDLER] Percent mode: "
-                    f"Balance={balance} | Risk={multiplier}% | Volume={calculated_volume}"
-                )
-            
-            else:
-                # โหมดที่ไม่รู้จัก → ใช้ multiply mode
-                logger.warning(f"[COPY_HANDLER] Unknown volume mode: {volume_mode}, using multiply mode")
-                calculated_volume = master_volume * multiplier
-            
-            # ตรวจสอบขอบเขตและปัดเศษ
-            # ⭐ ดึง strategy (Default = 'warn' - แจ้งเตือนแต่ยังเทรด)
-            min_volume_strategy = settings.get('min_volume_strategy', 'warn')
-            
-            # เฉพาะ 'skip' เท่านั้นที่จะข้ามการเทรด
-            skip_if_too_small = (min_volume_strategy == 'skip')
-            
-            calculated_volume = self._adjust_volume(
-                calculated_volume, 
-                min_lot, 
-                max_lot, 
-                lot_step,
-                skip_if_too_small=skip_if_too_small
-            )
-            
-            # ⭐ ถ้าได้ 0 = strategy เป็น 'skip' และ volume น้อยเกินไป
-            if calculated_volume == 0:
-                logger.warning(
-                    f"[COPY_HANDLER] ❌ Trade SKIPPED (strategy='skip'): Volume too small\n"
-                    f"  Master volume: {master_volume}\n"
-                    f"  Calculated volume: {master_volume * tick_ratio if master_account and master_symbol else master_volume * multiplier:.5f}\n"
-                    f"  Min lot: {min_lot}\n"
-                    f"  💡 Change strategy to 'warn' to trade with min_lot instead"
-                )
-                return 0
-            
-            return calculated_volume
-
-        except Exception as e:
-            logger.error(f"[COPY_HANDLER] Error calculating volume: {e}")
-            return max(master_volume, 0.01)
-    
-    def _adjust_volume(
-        self, 
-        volume: float, 
-        min_lot: float, 
-        max_lot: float, 
-        lot_step: float,
-        skip_if_too_small: bool = False  # ⭐ NEW: Option to skip trade
-    ) -> float:
-        """
-        ปรับ volume ให้อยู่ในขอบเขตที่ถูกต้อง
-        
-        ⭐ NEW: รองรับ 3 Strategies เมื่อ Volume น้อยเกินไป:
-        1. Round Up to Min Lot (Default)
-        2. Skip Trade (ถ้า skip_if_too_small = True)
-        3. Warning + Use Min Lot
-        
-        Args:
-            volume: Volume ที่คำนวณได้
-            min_lot: Volume ต่ำสุด
-            max_lot: Volume สูงสุด
-            lot_step: ขั้นของ Volume
-            skip_if_too_small: ถ้า True จะคืน 0 เมื่อ volume น้อยเกินไป
-            
-        Returns:
-            float: Volume ที่ปรับแล้ว (หรือ 0 ถ้าต้องการ skip)
-        """
-        original_volume = volume
-        
-        # ตรวจสอบว่า Volume น้อยกว่า Min Lot มากหรือไม่
-        if volume < min_lot:
-            # คำนวณ % ที่ต่างจาก Min Lot
-            percentage_diff = ((min_lot - volume) / min_lot) * 100
-            
-            # ⭐ แจ้งเตือนตามระดับความแตกต่าง + ส่งอีเมล์
-            if percentage_diff > 80:  # ⭐ เปลี่ยนจาก 90% เป็น 80%
-                # 🚨 CRITICAL: ต่างกันมากกว่า 80%
-                log_message = (
-                    f"⚠️ CRITICAL WARNING: Volume {volume:.5f} is {percentage_diff:.1f}% less than min_lot {min_lot}!\n"
-                    f"  Calculated volume is EXTREMELY small.\n"
-                    f"  Trade value will be {(min_lot/volume):.1f}x HIGHER than Master!\n"
-                    f"  Master will risk: ${volume * 10000:.2f} (example)\n"
-                    f"  Slave will risk: ${min_lot * 10000:.2f} (example)"
-                )
-                logger.error(f"[COPY_HANDLER] {log_message}")
-                
-                # ⭐ ส่งอีเมล์แจ้งเตือน CRITICAL
-                if self.email_handler:
-                    email_subject = "⚠️ CRITICAL: Min Volume Warning"
-                    email_message = f"""
-🚨 CRITICAL Min Volume Alert
-
-Volume Calculated: {volume:.5f} lot
-Min Lot Required: {min_lot} lot
-Difference: {percentage_diff:.1f}% less than minimum
-
-Risk Multiplier: {(min_lot/volume):.1f}x HIGHER than Master
-
-Example Risk:
-- Master Risk: ${volume * 10000:.2f}
-- Slave Risk: ${min_lot * 10000:.2f}
-
-{'⚠️ Trade will proceed with min_lot ' + str(min_lot) if not skip_if_too_small else '❌ Trade SKIPPED (strategy=skip)'}
-
-Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-"""
-                    try:
-                        self.email_handler.send_alert(email_subject, email_message.strip(), "high")
-                        logger.info("[COPY_HANDLER] ✅ CRITICAL email alert sent successfully")
-                    except Exception as e:
-                        logger.error(f"[COPY_HANDLER] ❌ Failed to send CRITICAL email: {e}")
-                
-                # ✅ ถ้าเป็น skip mode และต่างกันมากกว่า 80% → Skip
-                if skip_if_too_small:
-                    logger.warning(
-                        f"[COPY_HANDLER] ❌ SKIPPING TRADE: Volume too small (>80% difference, strategy='skip')"
-                    )
-                    
-                    # ⭐ ส่งอีเมล์แจ้งเตือนการ Skip
-                    if self.email_handler:
-                        skip_email_subject = "❌ Trade SKIPPED - Min Volume"
-                        skip_email_message = f"""
-❌ Trade Skipped Alert
-
-Reason: Volume difference exceeds 80% threshold
-
-Volume Calculated: {volume:.5f} lot
-Min Lot Required: {min_lot} lot
-Difference: {percentage_diff:.1f}%
-
-Strategy: skip
-Action: Trade NOT executed
-
-This trade was skipped to maintain accurate risk management.
-Consider increasing Master volume or changing strategy to 'warn'.
-
-Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-"""
-                        try:
-                            self.email_handler.send_alert(skip_email_subject, skip_email_message.strip(), "high")
-                            logger.info("[COPY_HANDLER] ✅ SKIP email alert sent successfully")
-                        except Exception as e:
-                            logger.error(f"[COPY_HANDLER] ❌ Failed to send SKIP email: {e}")
-                    
-                    return 0  # ⭐ คืน 0 = ไม่เทรด (เฉพาะเมื่อเลือก skip)
-                else:
-                    logger.warning(
-                        f"[COPY_HANDLER] ⚠️ Proceeding with min_lot {min_lot} anyway (strategy='warn')..."
-                    )
-                
-            elif percentage_diff > 50:
-                # ⚠️ WARNING: ต่างกัน 50-80%
-                log_message = (
-                    f"⚠️ WARNING: Volume {volume:.5f} is {percentage_diff:.1f}% less than min_lot {min_lot}\n"
-                    f"  Trade value will be {(min_lot/volume):.1f}x HIGHER than Master.\n"
-                    f"  Adjusted to min_lot {min_lot} and proceeding..."
-                )
-                logger.warning(f"[COPY_HANDLER] {log_message}")
-                
-                # ⭐ ส่งอีเมล์แจ้งเตือน WARNING
-                if self.email_handler:
-                    email_subject = "⚠️ Min Volume Warning"
-                    email_message = f"""
-⚠️ Min Volume Alert
-
-Volume Calculated: {volume:.5f} lot
-Min Lot Required: {min_lot} lot
-Difference: {percentage_diff:.1f}% less than minimum
-
-Risk Multiplier: {(min_lot/volume):.1f}x HIGHER than Master
-
-Action: Trade will proceed with min_lot {min_lot}
-
-Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-"""
-                    try:
-                        self.email_handler.send_alert(email_subject, email_message.strip(), "normal")
-                        logger.info("[COPY_HANDLER] ✅ WARNING email alert sent successfully")
-                    except Exception as e:
-                        logger.error(f"[COPY_HANDLER] ❌ Failed to send WARNING email: {e}")
-            
-            else:
-                # ℹ️ INFO: ต่างกันน้อยกว่า 50%
-                logger.info(
-                    f"[COPY_HANDLER] Volume {volume:.5f} < min_lot {min_lot}, adjusted to {min_lot}"
-                )
-            
-            volume = min_lot
-
-        # ตรวจสอบ Max Lot
-        if volume > max_lot:
-            logger.warning(
-                f"[COPY_HANDLER] Volume {volume} > max_lot {max_lot}, adjusted to {max_lot}"
-            )
-            volume = max_lot
-
-        # ปัดเศษตาม lot_step
-        steps = round(volume / lot_step)
-        adjusted_volume = steps * lot_step
-
-        # ตรวจสอบอีกครั้งหลังปัดเศษ
-        if adjusted_volume < min_lot:
-            adjusted_volume = min_lot
-            
-        # ⭐ Log สรุป
-        if abs(adjusted_volume - original_volume) > 0.001:
-            ratio_change = (adjusted_volume / original_volume) if original_volume > 0 else 0
-            logger.info(
-                f"[COPY_HANDLER] Volume adjustment: {original_volume:.5f} → {adjusted_volume:.5f} "
-                f"(×{ratio_change:.2f} = {ratio_change*100:.0f}% of original)"
-            )
-
-        return round(adjusted_volume, 2)
-
-    # ======================
-    #  Signal Conversion
+    #  Signal to Command Conversion
     # ======================
     def _convert_signal_to_command(self, signal_data: Dict, pair: Dict) -> Optional[Dict]:
         """
@@ -674,23 +315,221 @@ Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
         except Exception as e:
             logger.error(f"[COPY_HANDLER] ❌ Error converting signal: {e}", exc_info=True)
             return None
+    
+    # ======================
+    #  Volume Calculation
+    # ======================
+    def _calculate_slave_volume(
+        self,
+        master_volume: float,
+        settings: Dict,
+        slave_account: str,
+        symbol: str,
+        master_account: str = None,
+        master_symbol: str = None
+    ) -> float:
+        """
+        คำนวณ Volume สำหรับ Slave ตาม settings
+        
+        🔥 TICK VALUE AUTO-DETECTION (เฉพาะ Multiply Mode):
+        - เมื่อ Auto Mapping Volume = ON + Volume Mode = Multiply
+          → ตรวจสอบ Tick Value อัตโนมัติ
+          → ถ้า Tick Value ต่างกัน = ปรับ Volume ให้มูลค่าเท่ากัน
+          → ถ้า Tick Value เท่ากัน = ใช้ Multiply ปกติ
+        
+        - Volume Mode = Fixed/Percent → ไม่ได้รับผลจาก Auto Mapping Volume
+        
+        Volume Modes:
+        - multiply: Master Volume × Multiplier (รองรับ Tick Value Auto)
+        - fixed: ใช้ค่าคงที่ (ไม่เกี่ยวกับ Auto Mapping Volume)
+        - percent: คำนวณจาก % ของ Balance (ไม่เกี่ยวกับ Auto Mapping Volume)
+        
+        Args:
+            master_volume: Volume จาก Master
+            settings: การตั้งค่า Pair
+            slave_account: หมายเลขบัญชี Slave
+            symbol: Symbol ที่จะเทรดบน Slave
+            master_account: หมายเลขบัญชี Master
+            master_symbol: Symbol ต้นฉบับจาก Master
+            
+        Returns:
+            float: Volume ที่คำนวณแล้ว
+        """
+        try:
+            volume_mode = settings.get('volume_mode') or settings.get('volumeMode', 'multiply')
+            multiplier = float(settings.get('multiplier', 2))
+            auto_map_volume = settings.get('auto_map_volume', True)
+            
+            # ตรวจสอบข้อมูล Symbol ของ Slave
+            symbol_info = self.balance_helper.session_manager.get_symbol_info(slave_account, symbol)
+            if not symbol_info:
+                logger.warning(f"[COPY_HANDLER] Cannot get symbol info for {symbol}, using master volume")
+                return max(master_volume, 0.01)
+            
+            min_lot = float(symbol_info.get('volume_min', 0.01))
+            max_lot = float(symbol_info.get('volume_max', 100.0))
+            lot_step = float(symbol_info.get('volume_step', 0.01))
+            
+            # 🔥 TICK VALUE AUTO-DETECTION
+            # เงื่อนไข: Auto Mapping Volume = ON + Volume Mode = Multiply + มีข้อมูล Master/Slave
+            if (auto_map_volume and 
+                volume_mode == 'multiply' and 
+                master_account and 
+                master_symbol):
+                
+                logger.info("[COPY_HANDLER] 🔥 Tick Value Auto-Detection enabled (Auto Mapping Volume = ON + Multiply Mode)")
+                
+                # ดึงข้อมูล Symbol ของ Master และ Slave
+                master_symbol_info = self.balance_helper.session_manager.get_symbol_info(
+                    master_account, 
+                    master_symbol
+                )
+                
+                if master_symbol_info and symbol_info:
+                    # ดึง Tick Value (contract size)
+                    master_tick_value = float(master_symbol_info.get('trade_contract_size', 0))
+                    slave_tick_value = float(symbol_info.get('trade_contract_size', 0))
+                    
+                    # ตรวจสอบว่า Tick Value ต่างกันหรือไม่
+                    if master_tick_value > 0 and slave_tick_value > 0 and master_tick_value != slave_tick_value:
+                        # ✅ Tick Value ต่างกัน → ปรับ Volume ให้มูลค่าเท่ากัน
+                        tick_ratio = master_tick_value / slave_tick_value
+                        calculated_volume = master_volume * tick_ratio
+                        
+                        logger.info(
+                            f"[COPY_HANDLER] ✅ TICK VALUE DETECTED (Different):\n"
+                            f"  Master: {master_symbol} | Tick Value = {master_tick_value} | Volume = {master_volume}\n"
+                            f"  Slave: {symbol} | Tick Value = {slave_tick_value}\n"
+                            f"  Ratio = {tick_ratio:.4f} | Calculated Volume = {calculated_volume:.2f}\n"
+                            f"  Trade Value: Master = ${master_volume * master_tick_value:.2f} | "
+                            f"Slave = ${calculated_volume * slave_tick_value:.2f}"
+                        )
+                        
+                        # ตรวจสอบขอบเขตและปัดเศษ
+                        calculated_volume = self._adjust_volume(calculated_volume, min_lot, max_lot, lot_step)
+                        
+                        logger.info(
+                            f"[COPY_HANDLER] 🎯 TICK VALUE AUTO-ADJUSTED: "
+                            f"{master_volume} → {calculated_volume} "
+                            f"(Equal Value: ${calculated_volume * slave_tick_value:.2f})"
+                        )
+                        
+                        return calculated_volume
+                    
+                    elif master_tick_value == slave_tick_value and master_tick_value > 0:
+                        # ℹ️ Tick Value เท่ากัน → ใช้ Multiply ปกติ
+                        logger.info(
+                            f"[COPY_HANDLER] ℹ️ Tick Values are EQUAL ({master_tick_value}), "
+                            f"using standard Multiply: {master_volume} × {multiplier}"
+                        )
+                    else:
+                        # ⚠️ ไม่มีข้อมูล Tick Value → ใช้ Multiply ปกติ
+                        logger.info(
+                            f"[COPY_HANDLER] ⚠️ Tick Value data incomplete, "
+                            f"using standard Multiply: {master_volume} × {multiplier}"
+                        )
+            
+            # 📌 STANDARD VOLUME MODES
+            logger.info(f"[COPY_HANDLER] 📌 Using Volume Mode: {volume_mode}")
+            
+            if volume_mode == 'multiply':
+                # โหมด Multiply: Volume × Multiplier
+                calculated_volume = master_volume * multiplier
+                logger.info(f"[COPY_HANDLER] Multiply mode: {master_volume} × {multiplier} = {calculated_volume}")
+            
+            elif volume_mode == 'fixed':
+                # โหมด Fixed: ใช้ค่า Multiplier เป็น Volume คงที่
+                calculated_volume = multiplier
+                logger.info(f"[COPY_HANDLER] Fixed mode: Volume = {calculated_volume}")
+            
+            elif volume_mode == 'percent':
+                # โหมด Percent: คำนวณจาก % ของ Balance
+                balance = self.balance_helper.get_account_balance(slave_account)
+                if balance <= 0:
+                    logger.warning(f"[COPY_HANDLER] Cannot get balance for {slave_account}, using min lot")
+                    return min_lot
+                
+                risk_amount = balance * (multiplier / 100)
+                point_value = 10  # ค่าประมาณ
+                calculated_volume = risk_amount / (point_value * 100)
+                
+                logger.info(
+                    f"[COPY_HANDLER] Percent mode: "
+                    f"Balance={balance} | Risk={multiplier}% | Volume={calculated_volume}"
+                )
+            
+            else:
+                # โหมดที่ไม่รู้จัก → ใช้ multiply mode
+                logger.warning(f"[COPY_HANDLER] Unknown volume mode: {volume_mode}, using multiply mode")
+                calculated_volume = master_volume * multiplier
+            
+            # ตรวจสอบขอบเขตและปัดเศษ
+            calculated_volume = self._adjust_volume(calculated_volume, min_lot, max_lot, lot_step)
+            
+            return calculated_volume
+            
+        except Exception as e:
+            logger.error(f"[COPY_HANDLER] Error calculating volume: {e}")
+            return max(master_volume, 0.01)
+    
+    def _adjust_volume(self, volume: float, min_lot: float, max_lot: float, 
+                      lot_step: float, skip_if_too_small: bool = False) -> float:
+        """
+        ปรับ Volume ให้อยู่ในขอบเขตที่ถูกต้อง
+        
+        Args:
+            volume: Volume ที่ต้องการ
+            min_lot: Volume ต่ำสุด
+            max_lot: Volume สูงสุด
+            lot_step: ขั้นของ Volume
+            skip_if_too_small: ถ้า True จะคืนค่า 0 แทนการปรับเป็น min_lot
+            
+        Returns:
+            float: Volume ที่ปรับแล้ว
+        """
+        try:
+            # ตรวจสอบว่าเล็กกว่า min_lot
+            if volume < min_lot:
+                if skip_if_too_small:
+                    logger.warning(f"[COPY_HANDLER] Volume {volume} < min_lot {min_lot}, skipping trade")
+                    return 0
+                logger.warning(f"[COPY_HANDLER] Volume {volume} < min_lot {min_lot}, adjusting to {min_lot}")
+                volume = min_lot
+            
+            # ตรวจสอบว่าเกิน max_lot
+            if volume > max_lot:
+                logger.warning(f"[COPY_HANDLER] Volume {volume} > max_lot {max_lot}, adjusting to {max_lot}")
+                volume = max_lot
+            
+            # ปัดเศษตาม lot_step
+            if lot_step > 0:
+                volume = round(volume / lot_step) * lot_step
+            
+            # ตรวจสอบอีกครั้งหลังปัดเศษ
+            volume = max(min_lot, min(volume, max_lot))
+            
+            return volume
+            
+        except Exception as e:
+            logger.error(f"[COPY_HANDLER] Error adjusting volume: {e}")
+            return max(min_lot, 0.01)
 
 
 # =================== Testing & Debugging ===================
 
 def test_copy_handler():
-    """ฟังก์ชันทดสอบ CopyHandler พร้อม Tick Value Support"""
+    """ฟังก์ชันทดสอบ CopyHandler"""
     print("\n" + "="*80)
-    print("🧪 Testing CopyHandler - Tick Value Auto-Detection")
+    print("🧪 Testing CopyHandler - Multiple Pairs + Tick Value Auto-Detection")
     print("="*80)
     
     # Mock objects
     class MockCopyManager:
-        def validate_api_key(self, key):
+        def get_pair_for_master(self, key, master_account):
             return {
                 'id': 'pair_001',
                 'status': 'active',
-                'master_account': '111111',
+                'master_account': master_account,
                 'slave_account': '222222',
                 'settings': {
                     'auto_map_symbol': True,
@@ -703,9 +542,6 @@ def test_copy_handler():
     
     class MockSymbolMapper:
         def map_symbol(self, symbol):
-            # Map USOIL → USOIL.cash
-            if symbol == 'USOIL':
-                return 'USOIL.cash'
             return symbol
     
     class MockCopyExecutor:
@@ -717,7 +553,7 @@ def test_copy_handler():
             self.copy_history = self.MockCopyHistory()
         
         def execute_on_slave(self, slave_account, command, pair):
-            print(f"  ✅ Command sent to Slave: {command}")
+            print(f"  ✅ Command sent to Slave {slave_account}: {command}")
             return {'success': True}
     
     class MockSessionManager:
@@ -726,22 +562,12 @@ def test_copy_handler():
         def is_instance_alive(self, account):
             return True
         def get_symbol_info(self, account, symbol):
-            # Mock symbol info ตามภาพที่คุณส่งมา
-            if symbol == 'USOIL':
-                return {
-                    'volume_min': 0.01,
-                    'volume_max': 100.0,
-                    'volume_step': 0.01,
-                    'trade_contract_size': 1000.0  # ⭐ Crude Oil = 1000
-                }
-            elif symbol == 'USOIL.cash':
-                return {
-                    'volume_min': 0.01,
-                    'volume_max': 100.0,
-                    'volume_step': 0.01,
-                    'trade_contract_size': 100.0  # ⭐ WTI CFD = 100
-                }
-            return None
+            return {
+                'volume_min': 0.01,
+                'volume_max': 100.0,
+                'volume_step': 0.01,
+                'trade_contract_size': 100.0
+            }
     
     # Initialize handler
     handler = CopyHandler(
@@ -751,32 +577,25 @@ def test_copy_handler():
         MockSessionManager()
     )
     
-    # Test: Open Order with Tick Value Auto-Detection
-    print("\n📌 Test: OPEN ORDER - Tick Value Auto-Detection")
+    # Test: Open Order
+    print("\n📌 Test: OPEN ORDER")
     print("-" * 80)
-    signal_open = {
+    signal = {
         'event': 'deal_add',
         'order_id': 'order_12345',
         'account': '111111',
-        'symbol': 'USOIL',
+        'symbol': 'XAUUSD',
         'type': 'BUY',
-        'volume': 0.01,  # ⭐ Master ซื้อ 0.01 lot
-        'tp': 75.50,
-        'sl': 73.00
+        'volume': 1.0,
+        'tp': 2450.0,
+        'sl': 2400.0
     }
     
-    print("Master Signal:")
-    print(f"  Symbol: {signal_open['symbol']}")
-    print(f"  Volume: {signal_open['volume']} lot")
-    print(f"  Tick Value: 1000")
-    print(f"  Trade Value: ${signal_open['volume'] * 1000}")
-    print()
-    
-    result = handler.process_master_signal('test_key', signal_open)
+    result = handler.process_master_signal('test_key', signal)
     print(f"\nResult: {result}")
     
     print("\n" + "="*80)
-    print("✅ Tick Value Test Completed!")
+    print("✅ Test Completed!")
     print("="*80 + "\n")
 
 
