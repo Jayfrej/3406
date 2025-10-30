@@ -204,10 +204,17 @@ class CopyHandler:
         try:
             settings = pair.get('settings', {})
             
-            # Normalize keys
-            auto_map_symbol = settings.get('auto_map_symbol') or settings.get('autoMapSymbol', True)
-            auto_map_volume = settings.get('auto_map_volume') or settings.get('autoMapVolume', True)
-            copy_psl = settings.get('copy_psl') or settings.get('copyPSL', True)
+            # ✅ Normalize keys - รองรับทั้ง True และ False
+            # ใช้ if-else แทน or เพื่อให้ False ทำงานได้ถูกต้อง
+            auto_map_symbol = (settings.get('auto_map_symbol') 
+                             if 'auto_map_symbol' in settings 
+                             else settings.get('autoMapSymbol', True))
+            auto_map_volume = (settings.get('auto_map_volume') 
+                             if 'auto_map_volume' in settings 
+                             else settings.get('autoMapVolume', True))
+            copy_psl = (settings.get('copy_psl') 
+                       if 'copy_psl' in settings 
+                       else settings.get('copyPSL', True))
             
             # ดึงข้อมูลพื้นฐาน
             event = str(signal_data.get('event', '')).lower()
