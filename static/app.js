@@ -339,33 +339,6 @@ class TradingBotUI {
 
     // Setup Secret Key and Symbol Mapping listeners
     this.setupSecretAndMappingListeners();
-
-    // ===== ACCOUNT ITEM HIGHLIGHT =====
-    // เพิ่มสีพื้นหลังเมื่อเลือก Account ใน Modal
-
-    // Event: เมื่อ Checkbox เปลี่ยนสถานะ
-    document.addEventListener('change', (e) => {
-        if (e.target.type === 'checkbox' && e.target.closest('.account-item')) {
-            const accountItem = e.target.closest('.account-item');
-            if (e.target.checked) {
-                accountItem.classList.add('selected');
-            } else {
-                accountItem.classList.remove('selected');
-            }
-        }
-    });
-
-    // Event: คลิกที่ Account Item (นอกเหนือจาก Checkbox)
-    document.addEventListener('click', (e) => {
-        const accountItem = e.target.closest('.account-item');
-        if (accountItem && e.target.type !== 'checkbox' && !e.target.closest('button')) {
-            const checkbox = accountItem.querySelector('input[type="checkbox"]');
-            if (checkbox) {
-                checkbox.checked = !checkbox.checked;
-                checkbox.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-        }
-    });
 }
 
  
