@@ -5802,6 +5802,10 @@ function confirmAction() {
   if (window.ui) window.ui.confirmAction();
 }
 
+function filterCopyTradingPairs() {
+  if (window.ui) window.ui.filterPairsBySearch();
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   window.ui = new TradingBotUI();
