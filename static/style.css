@@ -2751,7 +2751,7 @@ html[data-theme="light"] .smtp-info-item code {
 
 .log-badge-warning {
   background: rgba(251, 191, 36, 0.15);
-  color: #fbbf24;
+  color: #f59e0b;
   border: 1px solid rgba(251, 191, 36, 0.3);
 }
 
@@ -2770,7 +2770,7 @@ html[data-theme="light"] .smtp-info-item code {
 }
 
 .log-warning {
-  border-left-color: #fbbf24;
+  border-left-color: #f59e0b;
 }
 
 .log-error {
@@ -3007,11 +3007,11 @@ html[data-theme="light"] .system-info .info-item code {
 .status-badge.wait-for-activate {
     background-color: #fff3cd;
     color: #856404;
-    border: 1px solid #ffc107;
+    border: 1px solid #f59e0b;
 }
 
 .status-badge.wait-for-activate i {
-    color: #ff9800;
+    color: #f59e0b;
     animation: pulse 2s infinite;
 }
 
@@ -3024,22 +3024,22 @@ html[data-theme="light"] .system-info .info-item code {
 .status-badge.online {
     background-color: #d4edda;
     color: #155724;
-    border: 1px solid #28a745;
+    border: 1px solid #22c55e;
 }
 
 .status-badge.online i {
-    color: #28a745;
+    color: #22c55e;
 }
 
 /* สถานะ Offline */
 .status-badge.offline {
     background-color: #f8d7da;
     color: #721c24;
-    border: 1px solid #dc3545;
+    border: 1px solid #ef4444;
 }
 
 .status-badge.offline i {
-    color: #dc3545;
+    color: #ef4444;
 }
 
 /* ============================================ */
@@ -3060,19 +3060,19 @@ html[data-theme="light"] .system-info .info-item code {
 
 /* BUY - สีเขียว */
 .action-badge.buy {
-    background-color: #28a745;
+    background-color: #22c55e;
     color: #ffffff;
 }
 
 /* SELL - สีแดง */
 .action-badge.sell {
-    background-color: #dc3545;
+    background-color: #ef4444;
     color: #ffffff;
 }
 
 /* CLOSE - สีเหลือง/ส้ม */
 .action-badge.close {
-    background-color: #ffc107;
+    background-color: #f59e0b;
     color: #000000;
 }
 
@@ -3146,17 +3146,17 @@ html[data-theme="light"] .system-info .info-item code {
 /* Dark Theme - Action Badges */
 @media (prefers-color-scheme: dark) {
   .action-badge.buy {
-    background-color: #28a745;
+    background-color: #22c55e;
     box-shadow: 0 0 8px rgba(40, 167, 69, 0.3);
   }
 
   .action-badge.sell {
-    background-color: #dc3545;
+    background-color: #ef4444;
     box-shadow: 0 0 8px rgba(220, 53, 69, 0.3);
   }
 
   .action-badge.close {
-    background-color: #ffc107;
+    background-color: #f59e0b;
     color: #000000;
     box-shadow: 0 0 8px rgba(255, 193, 7, 0.3);
   }
