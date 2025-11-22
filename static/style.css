@@ -282,49 +282,43 @@ html[data-theme="light"] .accounts-table tbody tr:hover{background:rgba(0,0,0,.0
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    border: 2px solid;
+    border: none;
 }
 
 /* Online Status - สีเขียว */
 .status-badge.online {
     background-color: rgba(34, 197, 94, 0.15);
     color: #22c55e;
-    border-color: #22c55e;
 }
 
 /* Offline Status - สีแดง */
 .status-badge.offline {
     background-color: rgba(239, 68, 68, 0.15);
     color: #ef4444;
-    border-color: #ef4444;
 }
 
 /* Loading Status - สีส้ม */
 .status-badge.loading {
     background-color: rgba(245, 158, 11, 0.15);
     color: #f59e0b;
-    border-color: #f59e0b;
 }
 
 /* Pause Status - สีเหลือง */
 .status-badge.pause {
     background-color: rgba(234, 179, 8, 0.15);
     color: #eab308;
-    border-color: #eab308;
 }
 
 /* Success Status - สีเขียว */
 .status-badge.success {
     background-color: rgba(34, 197, 94, 0.15);
     color: #22c55e;
-    border-color: #22c55e;
 }
 
 /* Error Status - สีแดง */
 .status-badge.error {
     background-color: rgba(239, 68, 68, 0.15);
     color: #ef4444;
-    border-color: #ef4444;
 }
 
 /* Indicator Dots (จุดสถานะ) */
@@ -368,22 +362,21 @@ html[data-theme="light"] .accounts-table tbody tr:hover{background:rgba(0,0,0,.0
     border-radius: 20px;
     font-size: 0.85rem;
     font-weight: 600;
-    border: 2px solid;
-    display: inline-block;
+    border: none;
+    display: inline-flex;
+    align-items: center;
 }
 
 /* Active - สีเขียว */
 .pair-status-badge.active {
     background-color: rgba(34, 197, 94, 0.15);
     color: #22c55e;
-    border-color: #22c55e;
 }
 
 /* Inactive - สีแดง */
 .pair-status-badge.inactive {
     background-color: rgba(239, 68, 68, 0.15);
     color: #ef4444;
-    border-color: #ef4444;
 }
 
 /* ===== ACTION BADGES ===== */
@@ -3235,10 +3228,11 @@ html[data-theme="light"] .system-info .info-item code {
 /* ============= Remote Mode Status Badges ============= */
 
 /* สถานะ Wait for Activate */
-.status-badge.wait-for-activate {
-    background-color: rgba(234, 179, 8, 0.15);
+.status-badge.wait-for-activate,
+.status-badge.waiting,
+.status-badge.wait {
+    background-color: rgba(234, 179, 8, 0.2);
     color: #eab308;
-    border-color: #eab308;
 }
 
 .status-badge.wait-for-activate::before {
@@ -4151,4 +4145,162 @@ button[onclick*="resume"] span:not(.fas):not(.fa) {
         left: 12px;
         font-size: 0.9rem;
     }
+}
+
+/* ===== COPY TRADING PAIRS UI ===== */
+
+/* Search Box */
+#copyTradingPairsCard .search-box {
+    margin-bottom: 20px;
+}
+
+#copyTradingPairsCard .search-box input {
+    width: 100%;
+    padding: 12px 16px;
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: white;
+    font-size: 0.95rem;
+}
+
+#copyTradingPairsCard .search-box input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+#copyTradingPairsCard .search-box input:focus {
+    outline: none;
+    border-color: rgba(34, 197, 94, 0.5);
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Pair Items */
+.copy-trading-pair-item {
+    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    transition: all 0.3s ease;
+}
+
+.copy-trading-pair-item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(34, 197, 94, 0.3);
+    transform: translateY(-2px);
+}
+
+/* Pair Header */
+.pair-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.pair-accounts {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.pair-accounts .arrow {
+    color: rgba(34, 197, 94, 0.7);
+    font-size: 1.2rem;
+}
+
+/* Pair Details */
+.pair-details {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 0.875rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 12px;
+}
+
+.pair-details > div {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.pair-details i {
+    color: rgba(34, 197, 94, 0.7);
+}
+
+/* API Key Display */
+.api-key-display {
+    background-color: rgba(0, 0, 0, 0.3);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    color: rgba(34, 197, 94, 0.9);
+    margin-bottom: 12px;
+    overflow-x: auto;
+    white-space: nowrap;
+}
+
+/* Action Buttons */
+.pair-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-start;
+}
+
+.pair-actions button {
+    flex: 0 0 auto;
+    min-width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ===== PAUSE/RESUME BUTTONS ===== */
+/* แสดงเฉพาะไอคอน ไม่แสดงข้อความ */
+
+.pause-resume-btn {
+    padding: 8px 12px !important;
+    min-width: 40px !important;
+    width: 40px !important;
+    height: 40px !important;
+    font-size: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.pause-resume-btn i {
+    font-size: 1rem !important;
+    margin: 0 !important;
+    display: inline-block !important;
+}
+
+/* Hide text */
+.pause-resume-btn::before,
+.pause-resume-btn::after {
+    content: none !important;
+}
+
+/* Additional button selectors */
+button.btn-warning[onclick*="togglePairStatus"],
+button.btn-warning[onclick*="pauseAccount"],
+button.btn-warning[onclick*="resumeAccount"],
+button[title="Pause"],
+button[title="Resume"] {
+    padding: 8px 12px !important;
+    font-size: 0 !important;
+    min-width: 40px !important;
+}
+
+button.btn-warning[onclick*="togglePairStatus"] i,
+button.btn-warning[onclick*="pauseAccount"] i,
+button.btn-warning[onclick*="resumeAccount"] i {
+    font-size: 1rem !important;
+    margin: 0 !important;
 }
