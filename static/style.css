@@ -1631,6 +1631,210 @@ button[onclick^="ui.editPlan"] {
 /* === end v2 tweaks === */
 
 
+/* ========================================
+   Copy Trading Pairs - Improved Spacing
+   ======================================== */
+
+/* 1. Card Body Padding */
+#page-copytrading .card-body {
+  padding: 24px;
+}
+
+/* 2. Account Section Enhanced */
+#page-copytrading .account-section {
+  padding: 24px;
+  background: var(--surface-2);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+/* 3. Section Title */
+#page-copytrading .section-title {
+  text-align: left;
+  margin-top: 0;
+  margin-bottom: 16px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* 4. Copy Account Row */
+#page-copytrading .copy-account-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+}
+
+#page-copytrading .copy-account-row .form-group {
+  flex: 1;
+}
+
+/* 5. Copy Button Group */
+#page-copytrading .copy-button-group {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+#page-copytrading .copy-button-group .btn {
+  flex: 1;
+  min-width: 140px;
+}
+
+/* 6. Plans List */
+#page-copytrading .plans-list {
+  max-height: 450px;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-top: 20px;
+}
+
+/* 7. Pairs Two Column Layout */
+#page-copytrading .pairs-two-column {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  min-height: 400px;
+}
+
+/* 8. Pairs Column */
+#page-copytrading .pairs-column {
+  padding: 24px;
+  background: var(--surface-2);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+/* 9. Pairs Column Title */
+#page-copytrading .pairs-column-title {
+  justify-content: flex-start;
+  text-align: left;
+  margin-top: 0;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--primary-color);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 10. Accounts List */
+#page-copytrading .accounts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 450px;
+  overflow-y: auto;
+  padding-right: 4px;
+  flex: 1;
+}
+
+/* 11. Account Card */
+#page-copytrading .account-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  transition: var(--transition);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#page-copytrading .account-card:hover {
+  background: var(--surface-3);
+  transform: translateX(2px);
+  box-shadow: var(--shadow);
+}
+
+/* 12. Plan Form Section */
+#page-copytrading .plan-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+/* 13. Empty State Styling */
+#page-copytrading .empty-state-small {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--text-dim);
+}
+
+#page-copytrading .empty-state-small i {
+  font-size: 2.4rem;
+  margin-bottom: 12px;
+  opacity: 0.4;
+  display: block;
+}
+
+#page-copytrading .empty-state-small p {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+/* ========================================
+   Copy Trading Responsive Adjustments
+   ======================================== */
+
+@media (max-width: 1200px) {
+  #page-copytrading .copy-trading-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #page-copytrading .copy-account-row {
+    flex-wrap: wrap;
+  }
+
+  #page-copytrading .copy-button-group {
+    width: 100%;
+  }
+
+  #page-copytrading .copy-button-group .btn {
+    flex: 1;
+    min-width: 120px;
+  }
+}
+
+@media (max-width: 1024px) {
+  #page-copytrading .pairs-two-column {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  #page-copytrading .card-body {
+    padding: 16px;
+  }
+
+  #page-copytrading .account-section {
+    padding: 16px;
+  }
+
+  #page-copytrading .pairs-column {
+    padding: 16px;
+  }
+
+  #page-copytrading .copy-account-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  #page-copytrading .copy-button-group {
+    flex-direction: column;
+  }
+
+  #page-copytrading .copy-button-group .btn {
+    width: 100%;
+    min-width: 100%;
+  }
+}
+
+
 /* --- Settings Page Styles (appended) --- */
 /* ==========================================
    เพิ่มส่วนนี้ใน static/style.css
