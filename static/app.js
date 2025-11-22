@@ -3870,7 +3870,16 @@ async copyCopyTradingEndpoint() {
       'close_all': 'close',
       'close-all': 'close',
       'close_symbol': 'close',
-      'close-symbol': 'close'
+      'close-symbol': 'close',
+      // Pending Order Types
+      'buy_stop': 'buy_stop',
+      'buy-stop': 'buy-stop',
+      'sell_stop': 'sell_stop',
+      'sell-stop': 'sell-stop',
+      'buy_limit': 'buy_limit',
+      'buy-limit': 'buy-limit',
+      'sell_limit': 'sell_limit',
+      'sell-limit': 'sell-limit'
     };
 
     return actionMap[actionLower] || 'default';
