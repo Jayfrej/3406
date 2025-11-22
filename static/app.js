@@ -494,13 +494,13 @@ async loadData() {
               <button class="btn btn-warning btn-sm"
                       onclick="ui.performAccountActionAM('${account.account}', 'pause')"
                       title="Pause Account">
-                <i class="fas fa-pause"></i> Pause
+                <i class="fas fa-pause"></i>
               </button>
               ` : account.status === 'PAUSE' ? `
               <button class="btn btn-success btn-sm"
                       onclick="ui.performAccountActionAM('${account.account}', 'resume')"
                       title="Resume Account">
-                <i class="fas fa-play"></i> Resume
+                <i class="fas fa-play"></i>
               </button>
               ` : ''}
               <button class="btn btn-secondary btn-sm"
@@ -3888,27 +3888,44 @@ async copyCopyTradingEndpoint() {
   formatActionBadge(action) {
     if (!action) return '<span class="action-badge default">-</span>';
 
-    let actionText = String(action).toUpperCase().trim();
+    const actionText = String(action).toUpperCase().trim();
+
+    // ✅ PENDING ORDERS - สีเทาพื้นหลัง ตัวหนังสือสีขาว
+    if (actionText.includes('BUY STOP') || actionText.includes('BUY_STOP')) {
+      return '<span class="action-badge" style="background-color: #6c757d; color: white;">BUY STOP</span>';
+    }
+    if (actionText.includes('SELL STOP') || actionText.includes('SELL_STOP')) {
+      return '<span class="action-badge" style="background-color: #6c757d; color: white;">SELL STOP</span>';
+    }
+    if (actionText.includes('BUY LIMIT') || actionText.includes('BUY_LIMIT')) {
+      return '<span class="action-badge" style="background-color: #6c757d; color: white;">BUY LIMIT</span>';
+    }
+    if (actionText.includes('SELL LIMIT') || actionText.includes('SELL_LIMIT')) {
+      return '<span class="action-badge" style="background-color: #6c757d; color: white;">SELL LIMIT</span>';
+    }
+
+    // ✅ MARKET ORDERS - ใช้ CSS class ตามปกติ
+    let normalizedAction = actionText;
 
     // Convert event types to proper action names (fallback for old events)
-    if (actionText.includes('DEAL') || actionText.includes('POSITION') || actionText.includes('ORDER')) {
-      if (actionText.includes('CLOSE')) {
-        actionText = 'CLOSE';
-      } else if (actionText.includes('MODIFY')) {
-        actionText = 'MODIFY';
-      } else if (actionText.includes('ADD') || actionText.includes('OPEN')) {
-        actionText = 'OPEN';
+    if (normalizedAction.includes('DEAL') || normalizedAction.includes('POSITION') || normalizedAction.includes('ORDER')) {
+      if (normalizedAction.includes('CLOSE')) {
+        normalizedAction = 'CLOSE';
+      } else if (normalizedAction.includes('MODIFY')) {
+        normalizedAction = 'MODIFY';
+      } else if (normalizedAction.includes('ADD') || normalizedAction.includes('OPEN')) {
+        normalizedAction = 'OPEN';
       }
     }
 
     // Normalize action names
-    if (actionText === 'LONG' || actionText === 'CALL') actionText = 'BUY';
-    if (actionText === 'SHORT' || actionText === 'PUT') actionText = 'SELL';
-    if (actionText.includes('CLOSE_ALL') || actionText.includes('CLOSE_SYMBOL')) actionText = 'CLOSE';
+    if (normalizedAction === 'LONG' || normalizedAction === 'CALL') normalizedAction = 'BUY';
+    if (normalizedAction === 'SHORT' || normalizedAction === 'PUT') normalizedAction = 'SELL';
+    if (normalizedAction.includes('CLOSE_ALL') || normalizedAction.includes('CLOSE_SYMBOL')) normalizedAction = 'CLOSE';
 
-    const badgeClass = this.getActionBadgeClass(actionText);
+    const badgeClass = this.getActionBadgeClass(normalizedAction);
 
-    return `<span class="action-badge ${badgeClass}">${this.escape(actionText)}</span>`;
+    return `<span class="action-badge ${badgeClass}">${this.escape(normalizedAction)}</span>`;
   }
 
   async clearHistory() {
