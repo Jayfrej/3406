@@ -271,24 +271,39 @@ html[data-theme="light"] .accounts-table tbody tr:hover{background:rgba(0,0,0,.0
 /* Action Buttons */
 .action-buttons{display:flex;gap:6px}
 
-/* Badges */
-.status-badge{padding:6px 10px;border-radius:999px;font-size:.78rem;font-weight:700;letter-spacing:.3px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px}
-.status-badge.online{background:rgba(34,197,94,.12);color:#22c55e;border-color:rgba(34,197,94,.35)}
-.status-badge.offline{background:rgba(239,68,68,.12);color:#ef4444;border-color:rgba(239,68,68,.35)}
-.status-badge.loading{background:rgba(245,158,11,.12);color:#f59e0b;border-color:rgba(245,158,11,.35)}
-.status-badge.pause{background:rgba(234,179,8,.12);color:#eab308;border-color:rgba(234,179,8,.35)}
-.status-badge.success{background:rgba(34,197,94,.12);color:#22c55e;border:1px solid rgba(34,197,94,.35)}
-.status-badge.error{background:rgba(239,68,68,.12);color:#ef4444;border:1px solid rgba(239,68,68,.35)}
-html[data-theme="dark"] .status-badge.success{background:rgba(34,197,94,.15);color:#4ade80}
-html[data-theme="dark"] .status-badge.error{background:rgba(239,68,68,.15);color:#f87171}
+/* ===== STATUS BADGES ===== */
+.status-badge{padding:6px 16px;border-radius:20px;font-size:0.85rem;font-weight:600;display:inline-flex;align-items:center;gap:6px;border:2px solid}
+.status-badge.online{background-color:rgba(34,197,94,0.15);color:#22c55e;border-color:#22c55e}
+.status-badge.offline{background-color:rgba(239,68,68,0.15);color:#ef4444;border-color:#ef4444}
+.status-badge.loading{background-color:rgba(245,158,11,0.15);color:#f59e0b;border-color:#f59e0b}
+.status-badge.pause{background-color:rgba(234,179,8,0.15);color:#eab308;border-color:#eab308}
+.status-badge.success{background-color:rgba(34,197,94,0.15);color:#22c55e;border-color:#22c55e}
+.status-badge.error{background-color:rgba(239,68,68,0.15);color:#ef4444;border-color:#ef4444}
+html[data-theme="dark"] .status-badge.success{background-color:rgba(34,197,94,0.15);color:#4ade80;border-color:#4ade80}
+html[data-theme="dark"] .status-badge.error{background-color:rgba(239,68,68,0.15);color:#f87171;border-color:#f87171}
 
-/* Action Badges for Copy Trading History */
-.action-badge{padding:6px 12px;border-radius:6px;font-size:.85rem;font-weight:600;letter-spacing:.3px;display:inline-block;text-align:center;min-width:70px;color:#ffffff !important;background:#64748b}
-.action-badge.buy{background:#22c55e;color:#ffffff !important}
-.action-badge.sell{background:#ef4444;color:#ffffff !important}
-.action-badge.close{background:#f59e0b;color:#ffffff !important}
-.action-badge.modify{background:#3b82f6;color:#ffffff !important}
-.action-badge.default{background:#64748b;color:#ffffff !important}
+/* Status Badge Indicator Dots */
+.status-badge::before{content:'';width:8px;height:8px;border-radius:50%;display:inline-block}
+.status-badge.online::before{background-color:#22c55e}
+.status-badge.offline::before{background-color:#ef4444}
+.status-badge.pause::before{background-color:#eab308}
+.status-badge.success::before{background-color:#22c55e}
+.status-badge.error::before{background-color:#ef4444}
+.status-badge.loading::before{background-color:#f59e0b}
+
+/* ===== ACTIVE/INACTIVE BADGES ===== */
+.pair-status-badge{padding:6px 16px;border-radius:20px;font-size:0.85rem;font-weight:600;border:2px solid;display:inline-block}
+.pair-status-badge.active{background-color:rgba(34,197,94,0.15);color:#22c55e;border-color:#22c55e}
+.pair-status-badge.inactive{background-color:rgba(239,68,68,0.15);color:#ef4444;border-color:#ef4444}
+
+/* ===== ACTION BADGES ===== */
+.action-badge{padding:6px 16px;border-radius:8px;font-size:0.85rem;font-weight:700;display:inline-block;text-align:center;min-width:100px;text-transform:uppercase;border:none}
+.action-badge.buy{background-color:#22c55e;color:white}
+.action-badge.sell{background-color:#ef4444;color:white}
+.action-badge.close{background-color:#6b7280;color:white}
+.action-badge.modify{background-color:#3b82f6;color:white}
+.action-badge.default{background-color:#64748b;color:white}
+.action-badge.buy-limit,.action-badge.buy-stop,.action-badge.sell-limit,.action-badge.sell-stop{background-color:#374151;color:white}
 
 /* Copy Trading History - Consistent Font Size */
 #copyHistoryTableBody td{font-size:.95rem !important;line-height:1.5 !important}
@@ -1219,28 +1234,33 @@ html[data-theme="light"] .json-code{color:#1e293b}
 .loading-spinner i{font-size:2.5rem;margin-bottom:12px;display:block}
 
 /* Toast Notifications */
+/* ===== TOAST NOTIFICATION ===== */
 .toast-container{
   position:fixed;
-  bottom:18px;
-  right:18px;
-  z-index:10000;
+  top:20px !important;
+  right:20px;
+  z-index:9999;
   display:flex;
-  flex-direction:column-reverse;
+  flex-direction:column;
   gap:10px;
   max-width:400px;
 }
 
-.toast{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);padding:14px 16px;min-width:300px;display:flex;align-items:center;gap:12px;border-left:4px solid var(--primary-color);color:var(--text);animation:slideInBottom .3s ease}
-.toast.success{border-left-color:var(--success-color)}
-.toast.error{border-left-color:var(--danger-color)}
-.toast.warning{border-left-color:var(--warning-color)}
-.toast.info{border-left-color:var(--info-color)}
-.toast-icon{font-size:1.5rem}
-.toast-content{flex:1}
+.toast{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px;box-shadow:0 4px 6px rgba(0,0,0,0.3);min-width:300px;display:flex;align-items:center;gap:12px;color:#fff;animation:slideInRight .3s ease-out}
+.toast.success{border-left:4px solid #22c55e}
+.toast.error{border-left:4px solid #ef4444}
+.toast.warning{border-left:4px solid #eab308}
+.toast.info{border-left:4px solid #3b82f6}
+.toast-icon{font-size:1.5rem;flex-shrink:0}
+.toast-content{flex:1;display:flex;align-items:center;gap:12px}
 .toast-title{font-weight:700;margin-bottom:2px}
-.toast-message{font-size:.9rem;color:var(--text-dim)}
-.toast-close{background:none;border:none;font-size:1.1rem;color:var(--text-dim);cursor:pointer;padding:4px}
-.toast-close:hover{color:var(--text)}
+.toast-message{font-size:.9rem;font-weight:600;margin:0;flex:1}
+.toast-close{background:none;border:none;font-size:1.2rem;color:#94a3b8;cursor:pointer;padding:0;flex-shrink:0}
+.toast-close:hover{color:#fff}
+
+/* Toast Animations */
+@keyframes slideInRight{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes slideOutRight{from{transform:translateX(0);opacity:1}to{transform:translateX(100%);opacity:0}}
 
 /* Modal */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;place-items:center;z-index:10001}
@@ -1442,7 +1462,7 @@ html[data-theme="light"] .json-code{color:#1e293b}
   .table-actions select,.search-input{width:100%}
   .example-header{flex-direction:column;align-items:flex-start}
   .modal{min-width:90%;max-width:90%}
-  .toast-container{right:10px;left:10px;bottom:10px;max-width:none}
+  .toast-container{right:10px;left:10px;top:10px !important;max-width:none}
   .toast{min-width:auto}
   .account-button-group{flex-direction:column}
   .account-button-group .btn{width:100%}
@@ -3020,26 +3040,26 @@ html[data-theme="light"] .system-info .info-item code {
     50% { opacity: 0.5; }
 }
 
-/* สถานะ Online */
+/* สถานะ Online - Override for dark theme consistency */
 .status-badge.online {
-    background-color: #d4edda;
-    color: #155724;
-    border: 1px solid #28a745;
+    background-color: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+    border: 2px solid #22c55e;
 }
 
 .status-badge.online i {
-    color: #28a745;
+    color: #22c55e;
 }
 
 /* สถานะ Offline */
 .status-badge.offline {
-    background-color: #f8d7da;
-    color: #721c24;
-    border: 1px solid #dc3545;
+    background-color: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 2px solid #ef4444;
 }
 
 .status-badge.offline i {
-    color: #dc3545;
+    color: #ef4444;
 }
 
 /* ============================================ */
@@ -3048,76 +3068,86 @@ html[data-theme="light"] .system-info .info-item code {
 
 .action-badge {
     display: inline-block;
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-weight: 600;
-    font-size: 0.75rem;
+    padding: 6px 16px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.85rem;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    min-width: 60px;
+    letter-spacing: 0.3px;
+    min-width: 100px;
     text-align: center;
+    border: none;
 }
 
-/* BUY - สีเขียว */
+/* BUY - สีเขียวเข้ม */
 .action-badge.buy {
-    background-color: #28a745;
-    color: #ffffff;
+    background-color: #22c55e;
+    color: white;
 }
 
-/* SELL - สีแดง */
+/* SELL - สีแดงเข้ม */
 .action-badge.sell {
-    background-color: #dc3545;
-    color: #ffffff;
+    background-color: #ef4444;
+    color: white;
 }
 
-/* CLOSE - สีเหลือง/ส้ม */
+/* CLOSE - สีเทา */
 .action-badge.close {
-    background-color: #ffc107;
-    color: #000000;
+    background-color: #6b7280;
+    color: white;
+}
+
+/* Pending Orders - สีเทาเข้ม */
+.action-badge.buy-limit,
+.action-badge.buy-stop,
+.action-badge.sell-limit,
+.action-badge.sell-stop {
+    background-color: #374151;
+    color: white;
 }
 
 /* LONG - สีเขียวอ่อน */
 .action-badge.long {
     background-color: #20c997;
-    color: #ffffff;
+    color: white;
 }
 
 /* SHORT - สีส้มแดง */
 .action-badge.short {
     background-color: #fd7e14;
-    color: #ffffff;
+    color: white;
 }
 
 /* CALL - สีน้ำเงิน */
 .action-badge.call {
     background-color: #007bff;
-    color: #ffffff;
+    color: white;
 }
 
 /* PUT - สีม่วง */
 .action-badge.put {
     background-color: #6f42c1;
-    color: #ffffff;
+    color: white;
 }
 
 /* CLOSE_ALL - สีเทา */
 .action-badge.close_all,
 .action-badge.close-all {
     background-color: #6c757d;
-    color: #ffffff;
+    color: white;
 }
 
 /* CLOSE_SYMBOL - สีน้ำตาล */
 .action-badge.close_symbol,
 .action-badge.close-symbol {
     background-color: #795548;
-    color: #ffffff;
+    color: white;
 }
 
 /* Default - เทา */
 .action-badge.default {
-    background-color: #e9ecef;
-    color: #495057;
+    background-color: #64748b;
+    color: white;
 }
 
 /* Hover effect */
@@ -3837,4 +3867,232 @@ html[data-theme="light"] .system-info .info-item code {
   color: var(--text-dim);
   font-size: 14px;
   margin: 0;
+}
+
+/* ===== PAUSE/RESUME BUTTONS - ICON ONLY ===== */
+.pause-resume-btn,
+button[onclick*="pause"],
+button[onclick*="resume"] {
+    padding: 8px 12px !important;
+    min-width: 44px !important;
+    width: 44px !important;
+    height: 44px !important;
+    font-size: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+}
+
+.pause-resume-btn i,
+.pause-resume-btn svg,
+.pause-resume-btn .fas,
+.pause-resume-btn .fa,
+button[onclick*="pause"] i,
+button[onclick*="resume"] i {
+    font-size: 1.1rem !important;
+    margin: 0 !important;
+    display: inline-block !important;
+}
+
+.pause-resume-btn .btn-text,
+.pause-resume-btn span:not(.fas):not(.fa):not(.material-icons),
+button[onclick*="pause"] span:not(.fas):not(.fa),
+button[onclick*="resume"] span:not(.fas):not(.fa) {
+    display: none !important;
+}
+
+/* ===== ACCOUNT ITEM HIGHLIGHT IN MODAL ===== */
+.account-item {
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background-color: transparent;
+    border: 2px solid transparent;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.account-item:hover {
+    background-color: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+.account-item.selected,
+.account-item:has(input[type="checkbox"]:checked) {
+    background-color: rgba(34, 197, 94, 0.15);
+    border-color: #22c55e;
+}
+
+.account-item input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    accent-color: #22c55e;
+    flex-shrink: 0;
+}
+
+.account-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.account-number {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.account-details {
+    display: flex;
+    gap: 12px;
+    font-size: 0.85rem;
+    color: #94a3b8;
+}
+
+.account-status,
+.account-broker {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Account Selection Item Highlight */
+.account-selection-item {
+    transition: all 0.3s ease;
+    border-radius: 8px;
+    border: 2px solid transparent;
+}
+
+.account-selection-item:hover {
+    background-color: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+.account-selection-item:has(input[type="checkbox"]:checked) {
+    background-color: rgba(34, 197, 94, 0.15);
+    border-color: #22c55e;
+}
+
+/* ===== SEARCH BOX POSITIONING ===== */
+.copy-trading-pairs .search-container,
+.copy-trading-section .search-container {
+    margin: 0 0 20px 0;
+    padding: 0;
+    width: 100%;
+}
+
+.copy-trading-pairs .search-wrapper,
+.copy-trading-section .search-wrapper {
+    position: relative;
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+.copy-trading-pairs .search-box,
+.copy-trading-section .search-box {
+    width: 100%;
+    max-width: 100%;
+    padding: 12px 16px 12px 45px;
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+    box-sizing: border-box;
+}
+
+.copy-trading-pairs .search-box:focus,
+.copy-trading-section .search-box:focus {
+    outline: none;
+    border-color: #3b82f6;
+    background-color: #0f172a;
+}
+
+.copy-trading-pairs .search-box::placeholder,
+.copy-trading-section .search-box::placeholder {
+    color: #64748b;
+}
+
+.copy-trading-pairs .search-icon,
+.copy-trading-section .search-icon {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #64748b;
+    font-size: 1rem;
+    pointer-events: none;
+}
+
+.copy-trading-pairs .card,
+.copy-trading-section .card {
+    overflow: visible;
+}
+
+.copy-trading-pairs .card-body,
+.copy-trading-section .card-body {
+    padding: 20px;
+}
+
+.copy-trading-pairs .card-header,
+.copy-trading-section .card-header {
+    padding: 16px 20px;
+}
+
+#copyTradingPairsModal .search-container {
+    margin: 0 0 20px 0;
+    padding: 0;
+    width: 100%;
+}
+
+/* Search Section in Copy Trading */
+.search-section {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+.search-input-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.search-input-wrapper .search-icon {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #64748b;
+    font-size: 1rem;
+    pointer-events: none;
+}
+
+.search-input-wrapper .search-input {
+    width: 100%;
+    padding: 12px 16px 12px 45px !important;
+    box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+    .copy-trading-pairs .search-box,
+    .copy-trading-section .search-box {
+        font-size: 0.9rem;
+        padding: 10px 14px 10px 40px;
+    }
+    
+    .copy-trading-pairs .search-icon,
+    .copy-trading-section .search-icon {
+        left: 12px;
+        font-size: 0.9rem;
+    }
 }

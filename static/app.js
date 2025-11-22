@@ -3486,36 +3486,34 @@ async copyCopyTradingEndpoint() {
   }
 
 
-  showToast(message, type = 'info', duration = 5000) {
+  showToast(message, type = 'info', duration = 3000) {
     const container = document.getElementById('toastContainer');
     if (!container) return;
-    
+
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     const icons = {
-      success: 'check-circle',
-      error: 'exclamation-circle',
-      warning: 'exclamation-triangle',
-      info: 'info-circle'
+      success: 'fa-check-circle',
+      error: 'fa-times-circle',
+      warning: 'fa-exclamation-triangle',
+      info: 'fa-info-circle'
     };
-    const titles = {
-      success: 'Success',
-      error: 'Error',
-      warning: 'Warning',
-      info: 'Information'
-    };
-    
+
     toast.innerHTML = `
-      <div class="toast-icon"><i class="fas fa-${icons[type]}"></i></div>
       <div class="toast-content">
-        <div class="toast-title">${titles[type]}</div>
-        <div class="toast-message">${message}</div>
-      </div>
-      <button class="toast-close" onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>`;
-    
+        <i class="fas ${icons[type]} toast-icon"></i>
+        <p class="toast-message">${message}</p>
+        <button class="toast-close" onclick="this.parentElement.parentElement.remove()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>`;
+
     container.appendChild(toast);
     setTimeout(() => {
-      if (toast.parentElement) toast.remove();
+      if (toast.parentElement) {
+        toast.style.animation = 'slideOutRight 0.3s ease-out';
+        setTimeout(() => toast.remove(), 300);
+      }
     }, duration);
   }
 
@@ -5805,6 +5803,31 @@ function confirmAction() {
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   window.ui = new TradingBotUI();
+
+  // ===== ACCOUNT ITEM HIGHLIGHT =====
+  // Event: เมื่อ Checkbox เปลี่ยนสถานะ
+  document.addEventListener('change', function(e) {
+    if (e.target.type === 'checkbox' && e.target.closest('.account-item, .account-selection-item')) {
+      const accountItem = e.target.closest('.account-item, .account-selection-item');
+      if (e.target.checked) {
+        accountItem.classList.add('selected');
+      } else {
+        accountItem.classList.remove('selected');
+      }
+    }
+  });
+
+  // Event: คลิกที่ Account Item (นอกเหนือจาก Checkbox)
+  document.addEventListener('click', function(e) {
+    const accountItem = e.target.closest('.account-item');
+    if (accountItem && e.target.type !== 'checkbox' && !e.target.closest('button')) {
+      const checkbox = accountItem.querySelector('input[type="checkbox"]');
+      if (checkbox) {
+        checkbox.checked = !checkbox.checked;
+        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
+  });
 });
 
 window.addEventListener('beforeunload', () => {

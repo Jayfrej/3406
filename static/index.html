@@ -887,56 +887,6 @@ Leave empty to disable authentication (allow all webhooks)
 </div>
 </div>
 
-<!-- Symbol Mapping Section -->
-<div class="card">
-  <div class="card-header">
-    <h3><i class="fas fa-exchange-alt"></i> Symbol Mapping</h3>
-  </div>
-  <div class="card-body">
-    <div class="settings-info-box">
-      <i class="fas fa-info-circle"></i>
-      <div>
-        <strong>Symbol Mapping</strong> allows you to configure per-account symbol translations.
-        <br/>Configure how TradingView symbols are converted to broker-specific formats.
-        <br/>Example: XAUUSD → GOLD, USOIL → CRUDE
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="symbolMappingAccount">
-        <i class="fas fa-user"></i> Select Account
-      </label>
-      <select id="symbolMappingAccount" class="form-input" onchange="ui.loadAccountSymbolMappings(this.value)">
-        <option value="">-- Select Account --</option>
-      </select>
-    </div>
-
-    <div id="symbolMappingContainer" style="display: none; margin-top: 20px;">
-      <h4 style="margin-bottom: 12px;">Current Mappings</h4>
-      <div id="symbolMappingsList" style="margin-bottom: 20px;">
-        <p style="color: var(--text-dim);">No custom mappings configured yet.</p>
-      </div>
-
-      <div style="margin-top: 20px;">
-        <h4 style="margin-bottom: 12px;">Add New Mapping</h4>
-        <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end;">
-          <div class="form-group" style="margin: 0;">
-            <label for="newMappingFrom">From (TradingView)</label>
-            <input type="text" id="newMappingFrom" class="form-input" placeholder="e.g. XAUUSD" />
-          </div>
-          <div class="form-group" style="margin: 0;">
-            <label for="newMappingTo">To (Broker Symbol)</label>
-            <input type="text" id="newMappingTo" class="form-input" placeholder="e.g. GOLD" />
-          </div>
-          <button class="btn btn-success" onclick="ui.addSymbolMapping()">
-            <i class="fas fa-plus"></i> Add
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
 </div>
 </div>
 </div>
