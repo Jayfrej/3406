@@ -3377,6 +3377,51 @@ html[data-theme="light"] .system-info .info-item code {
   }
 }
 
+/* ============================================ */
+/*    Pending Order Action Badges               */
+/* ============================================ */
+
+/* BUY STOP - พื้นหลังเทา ตัวหนังสือสีขาว */
+.action-badge.buy_stop,
+.action-badge.buy-stop {
+    background-color: #6c757d;
+    color: #ffffff;
+}
+
+/* SELL STOP - พื้นหลังเทา ตัวหนังสือสีขาว */
+.action-badge.sell_stop,
+.action-badge.sell-stop {
+    background-color: #6c757d;
+    color: #ffffff;
+}
+
+/* BUY LIMIT - พื้นหลังเทาเข้ม ตัวหนังสือสีขาว */
+.action-badge.buy_limit,
+.action-badge.buy-limit {
+    background-color: #5a6268;
+    color: #ffffff;
+}
+
+/* SELL LIMIT - พื้นหลังเทาเข้ม ตัวหนังสือสีขาว */
+.action-badge.sell_limit,
+.action-badge.sell-limit {
+    background-color: #5a6268;
+    color: #ffffff;
+}
+
+/* Hover effect for pending orders */
+.action-badge.buy_stop:hover,
+.action-badge.sell_stop:hover,
+.action-badge.buy_limit:hover,
+.action-badge.sell_limit:hover,
+.action-badge.buy-stop:hover,
+.action-badge.sell-stop:hover,
+.action-badge.buy-limit:hover,
+.action-badge.sell-limit:hover {
+    opacity: 0.85;
+    box-shadow: 0 2px 8px rgba(108, 117, 125, 0.4);
+}
+
 
 /* ============= Symbol Mapping Grid ============= */
 .symbol-mapping-grid {
@@ -4032,6 +4077,48 @@ html[data-theme="light"] .system-info .info-item code {
 .search-input::placeholder {
   color: var(--text-dim);
   font-size: 13px;
+}
+
+/* ============================================ */
+/*    Fix: Pair Search Box Container           */
+/* ============================================ */
+
+.pair-search-container {
+  width: 100%;
+  padding: 0 4px;  /* เว้นขอบเล็กน้อยไม่ให้ติดขอบ */
+  margin-bottom: 8px;
+  box-sizing: border-box;
+}
+
+.pair-search-container .form-input {
+  width: 100% !important;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Override any conflicting search-input styles */
+#page-copytrading #pairSearchInput {
+  width: 100% !important;
+  min-width: unset !important;
+  max-width: 100% !important;
+}
+
+/* Fix search box to stay within container */
+#page-copytrading .search-section {
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+#page-copytrading .search-input-wrapper {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#page-copytrading .search-input {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
 }
 
 /* Empty State for Search */
