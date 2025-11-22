@@ -3487,8 +3487,15 @@ async copyCopyTradingEndpoint() {
 
 
   showToast(message, type = 'info', duration = 5000) {
-    const container = document.getElementById('toastContainer');
-    if (!container) return;
+    let container = document.getElementById('toastContainer');
+
+    // สร้าง container ถ้ายังไม่มี
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'toastContainer';
+      container.className = 'toast-container';
+      document.body.appendChild(container);
+    }
     
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
@@ -5809,6 +5816,32 @@ function filterCopyTradingPairs() {
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   window.ui = new TradingBotUI();
+
+  // ===== ACCOUNT ITEM HIGHLIGHT IN MODAL =====
+
+  // Event: เมื่อ Checkbox เปลี่ยนสถานะ
+  document.addEventListener('change', function(e) {
+    if (e.target.type === 'checkbox' && e.target.closest('.account-item')) {
+      const accountItem = e.target.closest('.account-item');
+      if (e.target.checked) {
+        accountItem.classList.add('selected');
+      } else {
+        accountItem.classList.remove('selected');
+      }
+    }
+  });
+
+  // Event: คลิกที่ Account Item (นอกเหนือจาก Checkbox)
+  document.addEventListener('click', function(e) {
+    const accountItem = e.target.closest('.account-item');
+    if (accountItem && e.target.type !== 'checkbox' && !e.target.closest('button')) {
+      const checkbox = accountItem.querySelector('input[type="checkbox"]');
+      if (checkbox) {
+        checkbox.checked = !checkbox.checked;
+        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
+  });
 });
 
 window.addEventListener('beforeunload', () => {
