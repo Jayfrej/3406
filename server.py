@@ -50,13 +50,14 @@ from app.services.balance import balance_manager
 BASE_DIR = Path(__file__).resolve().parent
 ENV_FILE = BASE_DIR / '.env'
 
-# Load .env file with explicit path
+# Load .env file with explicit path (force override existing env vars)
 if ENV_FILE.exists():
-    load_dotenv(dotenv_path=ENV_FILE)
+    load_dotenv(dotenv_path=ENV_FILE, override=True)
     print(f"[OK] Loaded .env from: {ENV_FILE}")
 else:
     print(f"[WARNING] .env file not found at {ENV_FILE}")
-    print(f"[WARNING] Using default values. Please copy .env.template to .env and configure it.")
+    print(f"[WARNING] Please run 'python setup.py' to generate .env configuration file")
+    print(f"[WARNING] Using default values until .env is created")
 
 # Load environment variables with defaults
 BASIC_USER = os.getenv('BASIC_USER', 'admin')
