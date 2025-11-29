@@ -1932,4 +1932,48 @@ def sse_system_logs():
     return Response(stream_with_context(gen()), headers=headers)
 
 
-# à¹€à¸žà¸´à¹ˆà¸¡ initial logs à¹€à¸¡à¸·à¹ˆà¸­ server à¹€à¸£à¸´à¹ˆà¸¡à¸—à¸³à¸‡à¸²à¸™
+# =================== Server Startup ===================
+
+# Add initial system log
+add_system_log('info', '🚀 MT5 Trading Bot Server Starting...')
+add_system_log('success', '✅ All modules initialized successfully')
+add_system_log('info', f'📡 Server ready on http://0.0.0.0:5000')
+add_system_log('info', f'🔗 Webhook endpoint: /webhook/{WEBHOOK_TOKEN}')
+
+# Start Flask server
+if __name__ == '__main__':
+    try:
+        logger.info("="*80)
+        logger.info("🚀 MT5 TRADING BOT SERVER")
+        logger.info("="*80)
+        logger.info(f"📡 Server Address: http://0.0.0.0:5000")
+        logger.info(f"🌐 External URL: {EXTERNAL_BASE_URL}")
+        logger.info(f"🔗 Webhook: {EXTERNAL_BASE_URL}/webhook/{WEBHOOK_TOKEN}")
+        logger.info(f"📊 Health Check: {EXTERNAL_BASE_URL}/health")
+        logger.info("="*80)
+        logger.info("✅ Server is ready to accept connections")
+        logger.info("⏸️  Press Ctrl+C to stop the server")
+        logger.info("="*80)
+
+        # Run Flask server (blocking call)
+        app.run(
+            host='0.0.0.0',
+            port=5000,
+            debug=False,
+            use_reloader=False,
+            threaded=True
+        )
+
+    except KeyboardInterrupt:
+        logger.info("\n" + "="*80)
+        logger.info("⏹️  Server shutdown requested by user")
+        logger.info("="*80)
+        add_system_log('warning', '⏹️ Server shutting down...')
+
+    except Exception as e:
+        logger.error(f"❌ Server error: {e}", exc_info=True)
+        add_system_log('error', f'❌ Server error: {str(e)[:100]}')
+
+    finally:
+        logger.info("👋 MT5 Trading Bot Server stopped")
+        add_system_log('info', '👋 Server stopped')
