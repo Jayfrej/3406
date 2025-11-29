@@ -27,12 +27,7 @@ class SessionManager:
 
     def __init__(self):
         self.base_dir = os.path.abspath(os.getcwd())
-        self.instances_dir = os.path.abspath(
-            os.getenv("MT5_INSTANCES_DIR", os.path.join(self.base_dir, "mt5_instances"))
-        )
-        os.makedirs(self.instances_dir, exist_ok=True)
-        self.mt5_path = os.getenv("MT5_PATH", r"C:\Program Files\MetaTrader 5\terminal64.exe")
-        self.profile_source = os.getenv("MT5_PROFILE_SOURCE") or self._auto_detect_profile_source()
+        # Remote-only system: No local MT5 configuration needed
         data_dir = os.path.join(self.base_dir, "data")
         os.makedirs(data_dir, exist_ok=True)
         self.db_path = os.path.join(data_dir, "accounts.db")
@@ -760,13 +755,6 @@ class SessionManager:
             conn.commit()
 
     # ---------------------- Paths & Detect ----------------------
-    def get_instance_path(self, account: str) -> str:
-        return os.path.join(self.instances_dir, str(account))
-
-    def get_bat_path(self, account: str) -> str:
-        """Get path to the BAT launcher file for this account"""
-        instance_path = self.get_instance_path(account)
-        return os.path.join(instance_path, f"launch_mt5_{account}.bat")
 
     def _auto_detect_profile_source(self) -> Optional[str]:
         appdata = os.getenv("APPDATA")
@@ -1008,140 +996,7 @@ pause
         return False
 
     # -------------------- Create / Start / Stop --------------------
-    def ensure_instance(self, account: str, nickname: str = "") -> bool:
-        """ไม่ใช้แล้วในระบบ Remote"""
-        logger.warning("[REMOTE] ensure_instance() is disabled in remote mode")
-        return False
-
-    def create_instance(self, account: str, nickname: str = "") -> bool:
-        """ไม่ใช้แล้วในระบบ Remote"""
-        logger.warning("[REMOTE] create_instance() is disabled in remote mode")
-        return False
-
-    def _create_portable_data_structure(self, instance_path: str):
-        """Create the portable data directory structure"""
-        try:
-            data_path = os.path.join(instance_path, "Data")
-            
-            # Create essential directories for portable mode
-            directories = [
-                data_path,
-                os.path.join(data_path, "MQL5"),
-                os.path.join(data_path, "MQL5", "Files"),
-                os.path.join(data_path, "MQL5", "Include"),
-                os.path.join(data_path, "MQL5", "Experts"),
-                os.path.join(data_path, "MQL5", "Indicators"),
-                os.path.join(data_path, "MQL5", "Scripts"),
-                os.path.join(data_path, "config"),
-                os.path.join(data_path, "profiles"),
-                os.path.join(data_path, "bases"),
-                os.path.join(data_path, "logs"),
-            ]
-            
-            for dir_path in directories:
-                os.makedirs(dir_path, exist_ok=True)
-                
-            logger.info(f"[PORTABLE_STRUCTURE] ✓ Created portable data structure in {data_path}")
-            
-        except Exception as e:
-            logger.warning(f"[PORTABLE_STRUCTURE] Failed to create structure: {e}")
-
-    def _copy_user_profile_to_instance(self, instance_path: str):
-        """Copy user profile data to both instance and portable data directory"""
-        try:
-            src = self.profile_source
-            if not src or not os.path.exists(src):
-                logger.info(f"[COPY_PROFILE] Profile source not found or not set: {src}")
-                return
-            
-            # Copy to both locations for compatibility
-            data_path = os.path.join(instance_path, "Data")
-            
-            items = [
-                ("config", "config"),
-                ("profiles", "profiles"),
-                ("MQL5", "MQL5"),
-                ("bases", "bases"),
-            ]
-            
-            for sname, dname in items:
-                sp = os.path.join(src, sname)
-                if not os.path.exists(sp):
-                    continue
-                
-                # Copy to instance root (traditional location)
-                dp_instance = os.path.join(instance_path, dname)
-                # Copy to Data folder (portable location)
-                dp_data = os.path.join(data_path, dname)
-                
-                for dp in [dp_instance, dp_data]:
-                    try:
-                        if os.path.exists(dp):
-                            logger.info(f"[COPY_PROFILE] Merging {sname} -> {dp}")
-                            self._merge_directories(sp, dp)
-                        else:
-                            shutil.copytree(sp, dp, dirs_exist_ok=True)
-                            logger.info(f"[COPY_PROFILE] ✓ Copied {sname} -> {dp}")
-                    except Exception as e:
-                        logger.warning(f"[COPY_PROFILE] Failed to copy {sname} to {dp}: {e}")
-                        
-        except Exception as e:
-            logger.warning(f"[COPY_PROFILE] Error: {e}")
-
-    def _merge_directories(self, src_dir: str, dst_dir: str):
-        for root, dirs, files in os.walk(src_dir):
-            rel = os.path.relpath(root, src_dir)
-            dst_root = dst_dir if rel == "." else os.path.join(dst_dir, rel)
-            os.makedirs(dst_root, exist_ok=True)
-            for f in files:
-                s = os.path.join(root, f)
-                d = os.path.join(dst_root, f)
-                try:
-                    shutil.copy2(s, d)
-                except Exception as e:
-                    logger.debug(f"[MERGE_DIRS] Skip {f}: {e}")
-
-    def start_instance(self, account: str) -> bool:
-        """ไม่ใช้แล้วในระบบ Remote"""
-        logger.warning("[REMOTE] start_instance() is disabled in remote mode")
-        return False
-
-    def stop_instance(self, account: str) -> bool:
-        """ไม่ใช้แล้วในระบบ Remote"""
-        logger.warning("[REMOTE] stop_instance() is disabled in remote mode")
-        return False
-
-    def restart_instance(self, account: str) -> bool:
-        """ไม่ใช้แล้วในระบบ Remote"""
-        logger.warning("[REMOTE] restart_instance() is disabled in remote mode")
-        return False
-
-    def delete_instance(self, account: str) -> bool:
-        try:
-            self.stop_instance(account)
-            inst = self.get_instance_path(account)
-            if os.path.exists(inst):
-                shutil.rmtree(inst, ignore_errors=True)
-            with sqlite3.connect(self.db_path) as conn:
-                conn.execute("DELETE FROM accounts WHERE account = ?", (account,))
-                conn.commit()
-            return True
-        except Exception as e:
-            logger.error(f"[DELETE_INSTANCE] Failed for {account}: {e}")
-            return False
-
-    def focus_instance(self, account: str) -> bool:
-        try:
-            import pygetwindow as gw  # optional
-        except Exception:
-            logger.info("[FOCUS] pygetwindow not available; skipping focus.")
-            return False
-        try:
-            wins = [w for w in gw.getAllTitles() if "meta" in w.lower() or "trader" in w.lower()]
-            if wins:
-                win = gw.getWindowsWithTitle(wins[0])[0]
-                win.activate()
-                return True
-        except Exception as e:
-            logger.debug(f"[FOCUS] Unable to focus window: {e}")
-        return False
+    # ====================================================================
+    # REMOTE-ONLY SYSTEM: Local instance management methods removed
+    # All accounts are managed remotely via EA connections
+    # ====================================================================

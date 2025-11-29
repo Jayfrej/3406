@@ -25,14 +25,6 @@ class WebhookConfig:
     rate_limit: str = "10 per minute"
 
 @dataclass
-class MT5Config:
-    """MT5 configuration settings"""
-    main_path: str = r"C:\Program Files\MetaTrader 5\terminal64.exe"
-    instances_dir: str = r"C:\trading_bot\mt5_instances"
-    profile_source: str = r"C:\Users\{}\AppData\Roaming\MetaQuotes\Terminal\XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-    delete_instance_files: bool = False
-
-@dataclass
 class EmailConfig:
     """Email notification configuration"""
     enabled: bool = False
@@ -152,12 +144,7 @@ class ConfigManager:
             self.webhook.external_base_url = os.getenv('EXTERNAL_BASE_URL', self.webhook.external_base_url)
             self.webhook.rate_limit = os.getenv('WEBHOOK_RATE_LIMIT', self.webhook.rate_limit)
             
-            # MT5 config
-            self.mt5.main_path = os.getenv('MT5_PATH', self.mt5.main_path)
-            self.mt5.instances_dir = os.getenv('MT5_INSTANCES_DIR', self.mt5.instances_dir)
-            self.mt5.profile_source = os.getenv('MT5_PROFILE_SOURCE', self.mt5.profile_source)
-            self.mt5.delete_instance_files = os.getenv('DELETE_INSTANCE_FILES', 'False').lower() == 'true'
-            
+
             # Email config
             self.email.enabled = os.getenv('EMAIL_ENABLED', 'False').lower() == 'true'
             self.email.smtp_server = os.getenv('SMTP_SERVER', self.email.smtp_server)
