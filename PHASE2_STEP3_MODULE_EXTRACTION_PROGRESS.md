@@ -77,17 +77,19 @@ await WebhookUI.removeAccount('12345');
 | **Webhooks** | ✅ Done | 2 | 522 | 100% |
 | **Accounts** | ✅ Done | 2 | 723 | 100% |
 | **Copy Trading** | ✅ Done | 2 | 1,022 | 100% |
-| **System** | 🔄 Next | 2 | ~400 | 0% |
-| **Settings** | ⏳ Pending | 1 | ~600 | 0% |
+| **System** | ✅ Done | 2 | 514 | 100% |
+| **Settings** | ✅ Done | 2 | 717 | 100% |
 
 **Total Extracted So Far:**
 - Core modules: 969 lines (Phase 2.2)
 - Webhooks: 522 lines (Phase 2.3)
 - Accounts: 723 lines (Phase 2.3)
 - Copy Trading: 1,022 lines (Phase 2.3)
-- **Total: 3,236 lines (55.4% of 5,840)**
+- System: 514 lines (Phase 2.3)
+- Settings: 717 lines (Phase 2.3)
+- **Total: 4,467 lines (76.5% of 5,840)**
 
-**Remaining:** ~2,604 lines
+**Remaining:** ~1,373 lines
 
 ---
 
