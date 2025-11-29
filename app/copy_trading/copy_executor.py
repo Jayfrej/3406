@@ -9,7 +9,7 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 # Import command_queue สำหรับ API mode
-from app.command_queue import command_queue
+from app.services.commands import command_queue
 
 
 class CopyExecutor:

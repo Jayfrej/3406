@@ -10,12 +10,14 @@ from .copy_manager import CopyManager
 from .copy_handler import CopyHandler
 from .copy_executor import CopyExecutor
 from .copy_history import CopyHistory
-from .balance_helper import BalanceHelper  
+from .balance_helper import BalanceHelper
+from .routes import copy_trading_bp
 
 __all__ = [
     'CopyManager',
     'CopyHandler',
     'CopyExecutor',
     'CopyHistory',
-    'BalanceHelper'  
+    'BalanceHelper',
+    'copy_trading_bp'
 ]

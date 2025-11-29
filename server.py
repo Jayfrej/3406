@@ -23,20 +23,27 @@ try:
 except Exception:
     from trades import trades_bp, init_trades, record_and_broadcast, delete_account_history
 
+# ==== import core utilities ====
 try:
-    from app.session_manager import SessionManager
-    from app.symbol_mapper import SymbolMapper
-    from app.email_handler import EmailHandler
+    from app.services.accounts import SessionManager
+    from app.services.symbols import SymbolMapper
+    from app.core.email import EmailHandler
 except Exception:
-    from session_manager import SessionManager
-    from symbol_mapper import SymbolMapper
-    from email_handler import EmailHandler
+    from services.accounts import SessionManager
+    from services.symbols import SymbolMapper
+    from core.email import EmailHandler
 
+# ==== import feature modules ====
+from app.modules.webhooks import webhooks_bp
+from app.modules.webhooks.services import get_webhook_allowlist
+from app.modules.accounts import accounts_bp
+from app.modules.system import system_bp
+from app.copy_trading import copy_trading_bp
 
-
-from app.broker_data_manager import BrokerDataManager
-from app.signal_translator import SignalTranslator
-from app.account_balance import balance_manager
+# ==== import services ====
+from app.services.broker import BrokerDataManager
+from app.services.signals import SignalTranslator
+from app.services.balance import balance_manager
 # ==== env ====
 load_dotenv()
 BASIC_USER = os.getenv('BASIC_USER', 'admin')
@@ -212,8 +219,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ==== register trades blueprint + warm buffer à¹ƒà¸™ app context ====
+# ==== register blueprints + warm buffer ====
 app.register_blueprint(trades_bp)
+app.register_blueprint(webhooks_bp)
+app.register_blueprint(accounts_bp)
+app.register_blueprint(system_bp)
+app.register_blueprint(copy_trading_bp)
+
 with app.app_context():
     init_trades()
 
@@ -238,31 +250,6 @@ def _save_json(path, obj):
     os.replace(tmp, path)
 
 
-def get_webhook_allowlist():
-    """
-    à¹‚à¸„à¸£à¸‡à¸ªà¸£à¹‰à¸²à¸‡: [{"account":"111", "nickname":"A", "enabled": true}, ...]
-    """
-    lst = _load_json(WEBHOOK_ACCOUNTS_FILE, [])
-    out = []
-    for it in lst:
-        acc = str(it.get("account") or it.get("id") or "").strip()
-        if acc:
-            out.append({
-                "account": acc,
-                "nickname": it.get("nickname", ""),
-                "enabled": bool(it.get("enabled", True)),
-            })
-    return out
-
-
-def is_account_allowed_for_webhook(account: str) -> bool:
-    account = str(account).strip()
-    for it in get_webhook_allowlist():
-        if it["account"] == account and it.get("enabled", True):
-            return True
-    return False
-
-
 # =================== auth helpers ===================
 def session_login_required(f):
     @wraps(f)
@@ -271,6 +258,88 @@ def session_login_required(f):
             return jsonify({'error': 'Auth required'}), 401
         return f(*args, **kwargs)
     return _wrap
+
+
+# ==== Apply rate limiting and authentication to routes ====
+# Apply rate limiting to webhook POST endpoint
+if 'webhooks.webhook_handler' in app.view_functions:
+    limiter.limit("10 per minute")(app.view_functions['webhooks.webhook_handler'])
+
+# Apply authentication to protected webhook endpoints
+protected_webhook_endpoints = [
+    'webhooks.get_webhook_url',
+    'webhooks.list_webhook_accounts',
+    'webhooks.add_webhook_account_endpoint',
+    'webhooks.delete_webhook_account_endpoint'
+]
+
+for endpoint_name in protected_webhook_endpoints:
+    if endpoint_name in app.view_functions:
+        app.view_functions[endpoint_name] = session_login_required(app.view_functions[endpoint_name])
+
+# Apply authentication to account management endpoints
+protected_account_endpoints = [
+    'accounts.get_accounts',
+    'accounts.add_account',
+    'accounts.restart_account',
+    'accounts.stop_account',
+    'accounts.open_account',
+    'accounts.pause_account',
+    'accounts.resume_account',
+    'accounts.delete_account',
+    'accounts.accounts_stats'
+]
+
+for endpoint_name in protected_account_endpoints:
+    if endpoint_name in app.view_functions:
+        app.view_functions[endpoint_name] = session_login_required(app.view_functions[endpoint_name])
+
+# Apply rate limiting exemption to get_accounts (high-frequency endpoint)
+if 'accounts.get_accounts' in app.view_functions:
+    limiter.exempt(app.view_functions['accounts.get_accounts'])
+
+# Apply authentication to copy trading endpoints
+protected_copy_trading_endpoints = [
+    'copy_trading.list_pairs',
+    'copy_trading.create_copy_pair',
+    'copy_trading.update_copy_pair',
+    'copy_trading.delete_pair',
+    'copy_trading.toggle_copy_pair',
+    'copy_trading.add_master_to_pair',
+    'copy_trading.add_slave_to_pair',
+    'copy_trading.get_master_accounts',
+    'copy_trading.add_master_account',
+    'copy_trading.delete_master_account',
+    'copy_trading.get_slave_accounts',
+    'copy_trading.add_slave_account',
+    'copy_trading.delete_slave_account',
+    'copy_trading.get_copy_history',
+    'copy_trading.clear_copy_history',
+    'copy_trading.clear_copy_history_legacy'
+]
+
+for endpoint_name in protected_copy_trading_endpoints:
+    if endpoint_name in app.view_functions:
+        app.view_functions[endpoint_name] = session_login_required(app.view_functions[endpoint_name])
+
+# Apply rate limiting to copy trade signal endpoint (API from EA)
+if 'copy_trading.copy_trade_endpoint' in app.view_functions:
+    limiter.limit("100 per minute")(app.view_functions['copy_trading.copy_trade_endpoint'])
+
+# Apply authentication to system/settings endpoints
+protected_system_endpoints = [
+    'system.get_all_settings',
+    'system.save_rate_limit_settings',
+    'system.get_email_settings',
+    'system.save_email_settings',
+    'system.test_email_settings',
+    'system.get_system_logs',
+    'system.clear_system_logs'
+]
+
+for endpoint_name in protected_system_endpoints:
+    if endpoint_name in app.view_functions:
+        app.view_functions[endpoint_name] = session_login_required(app.view_functions[endpoint_name])
 
 
 @app.post("/login")
@@ -368,7 +437,7 @@ The MT5 instance has started successfully.
                         add_system_log('success', f'âœ… Account {account} is now online')
                         logger.info(f"[STATUS_CHANGE] {account}: {old_status} -> {new_status}")
                 
-                # à¸­à¸±à¸›à¹€à¸”à¸• Status à¹ƒà¸™ DB
+                # à¸­à¸±à¸›à¹€à¸”à¸• Status à¸›à¸±à¸ˆà¸ˆà¸¸à¸šà¸±à¸™
                 session_manager.update_account_status(account, new_status)
                 
                 # à¸šà¸±à¸™à¸—à¸¶à¸ Status à¸›à¸±à¸ˆà¸ˆà¸¸à¸šà¸±à¸™
@@ -653,1006 +722,82 @@ def delete_account(account):
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+# =================== Account Management Routes ===================
+# ⚠️ ACCOUNT ROUTES MOVED TO: app/modules/accounts/routes.py
+#
+# Old routes removed (now in accounts_bp Blueprint):
+# - GET /accounts - List all accounts
+# - POST /accounts - Add new account
+# - DELETE /accounts/<account> - Delete account
+# - POST /accounts/<account>/pause - Pause account
+# - POST /accounts/<account>/resume - Resume account
+# - POST /accounts/<account>/restart - Restart (not available in remote mode)
+# - POST /accounts/<account>/stop - Stop (not available in remote mode)
+# - POST /accounts/<account>/open - Open (not available in remote mode)
+# - GET /accounts/stats - Get account statistics
+#
+# All account management functionality now handled by accounts_bp Blueprint
+# =================================================================
+
+
 # =================== webhook mgmt (allowlist) ===================
-@app.get("/webhook-accounts")
-@session_login_required
-def list_webhook_accounts():
-    return jsonify({"accounts": get_webhook_allowlist()})
-
-
-@app.post("/webhook-accounts")
-@session_login_required
-def add_webhook_account():
-    data = request.get_json(silent=True) or {}
-    account = str(data.get("account") or data.get("id") or "").strip()
-    if not account:
-        add_system_log('error', '❌ [400] Webhook account creation failed - Account number required')
-        return jsonify({"error": "account required"}), 400
-    nickname = str(data.get("nickname") or "").strip()
-    enabled = bool(data.get("enabled", True))
-
-    # ถ้า account ยังไม่มีใน Account Management ให้สร้างใหม่
-    if not session_manager.account_exists(account):
-        if not session_manager.add_remote_account(account, nickname):
-            return jsonify({'error': f'Failed to create account {account}'}), 500
-        logger.info(f"[API] Created new account in Account Management: {account}")
-
-    lst = get_webhook_allowlist()
-    found = False
-    for it in lst:
-        if it["account"] == account:
-            it["nickname"] = nickname or it.get("nickname", "")
-            it["enabled"] = enabled
-            found = True
-            break
-    if not found:
-        lst.append({"account": account, "nickname": nickname, "enabled": enabled})
-
-    _save_json(WEBHOOK_ACCOUNTS_FILE, lst)
-    status_text = "updated" if found else "added"
-    add_system_log('success', f'✅ [200] Webhook account {status_text}: {account} ({nickname})')
-    return jsonify({"ok": True, "account": account})
-
-
-
-
-@app.delete("/webhook-accounts/<account>")
-@session_login_required
-def delete_webhook_account(account):
-    lst = [it for it in get_webhook_allowlist() if it["account"] != str(account)]
-    _save_json(WEBHOOK_ACCOUNTS_FILE, lst)
-    add_system_log('warning', f'ðŸ—‘ï¸ [200] Webhook account removed: {account}')
-    return jsonify({"ok": True})
-
-
-# =================== webhook basics ===================
-@app.get('/webhook-url')
-@session_login_required
-def get_webhook_url():
-    return jsonify({'url': f"{EXTERNAL_BASE_URL}/webhook/{WEBHOOK_TOKEN}"})
-
-
-@app.get('/webhook')
-@app.get('/webhook/')
-def webhook_info():
-    return jsonify({
-        'message': 'Webhook endpoint active',
-        'supported_methods': ['POST'],
-        'health_check': '/webhook/health',
-        'endpoint_format': '/webhook/{token}',
-        'supported_actions': ['BUY', 'SELL', 'LONG', 'SHORT', 'CALL', 'PUT', 'CLOSE', 'CLOSE_ALL', 'CLOSE_SYMBOL'],
-        'timestamp': datetime.now().isoformat()
-    })
-
-
-@app.get('/webhook/health')
-def webhook_health():
-    return jsonify({'status': 'ok', 'webhook_status': 'active', 'timestamp': datetime.now().isoformat()})
-
-
-# =================== webhook handler (à¹€à¸Šà¹‡à¸„ allowlist) ===================
-# =================== webhook handler (à¹€à¸Šà¹‡à¸„ allowlist) ===================
-
-@app.post('/webhook/<token>')
-@limiter.limit("10 per minute")
-def webhook_handler(token):
-    if token != WEBHOOK_TOKEN:
-        logger.warning("[UNAUTHORIZED] invalid webhook token")
-        add_system_log('error', 'ðŸ”’ [401] Webhook unauthorized - Invalid token')
-        email_handler.send_alert("Unauthorized Webhook Access", "Invalid token")
-        return jsonify({'error': 'Unauthorized'}), 401
-
-    try:
-        data = request.get_json()
-        if not data:
-            raise ValueError("No JSON data received")
-    except Exception as e:
-        logger.error(f"[BAD_PAYLOAD] {e}")
-        add_system_log('error', f'âŒ [400] Webhook bad request - Invalid JSON: {str(e)[:80]}')
-        email_handler.send_alert("Bad Webhook Payload", f"Invalid JSON: {e}")
-
-        # พยายามดึงข้อมูลจาก raw request data
-        raw_data = request.get_data(as_text=True)
-        account = '-'
-        action = 'UNKNOWN'
-        symbol = '-'
-        volume = ''
-        price = ''
-        tp = ''
-        sl = ''
-
-        # พยายาม parse แบบหละหลวม
-        try:
-            import re
-            # ดึง account number
-            acc_match = re.search(r'"account(?:_number)?"\s*:\s*"?(\d+)"?', raw_data)
-            if acc_match:
-                account = acc_match.group(1)
-
-            # ดึง action
-            action_match = re.search(r'"action"\s*:\s*"([^"]+)"', raw_data)
-            if action_match:
-                action = action_match.group(1).upper()
-
-            # ดึง symbol
-            symbol_match = re.search(r'"symbol"\s*:\s*"([^"]+)"', raw_data)
-            if symbol_match:
-                symbol = symbol_match.group(1)
-
-            # ดึง volume
-            vol_match = re.search(r'"volume"\s*:\s*"?([0-9.]+)"?', raw_data)
-            if vol_match:
-                volume = vol_match.group(1)
-
-            # ดึง price
-            price_match = re.search(r'"price"\s*:\s*"?([0-9.]+)"?', raw_data)
-            if price_match:
-                price = price_match.group(1)
-
-            # ดึง take_profit / tp
-            tp_match = re.search(r'"(?:take_profit|tp)"\s*:\s*"?([0-9.]+)"?', raw_data)
-            if tp_match:
-                tp = tp_match.group(1)
-
-            # ดึง stop_loss / sl
-            sl_match = re.search(r'"(?:stop_loss|sl)"\s*:\s*"?([0-9.]+)"?', raw_data)
-            if sl_match:
-                sl = sl_match.group(1)
-        except:
-            pass
-
-        # บันทึก Invalid JSON Error ลง Trading History
-        record_and_broadcast({
-            'status': 'error',
-            'action': action,
-            'symbol': symbol,
-            'account': account,
-            'volume': volume,
-            'price': price,
-            'tp': tp,
-            'sl': sl,
-            'message': 'Invalid JSON'
-        })
-
-        return jsonify({'error': 'Invalid JSON payload'}), 400
-
-    logger.info(f"[WEBHOOK] {json.dumps(data, ensure_ascii=False)}")
-    action = str(data.get('action', 'UNKNOWN')).upper()
-    symbol = data.get('symbol', '-')
-    volume = data.get('volume', '-')
-    account = data.get('account_number') or (data.get('accounts', [None])[0] if data.get('accounts') else '-')
-    add_system_log('info', f'ðŸ“¥ [200] Webhook received: {action} {symbol} Vol:{volume} Acc:{account}')
-
-    valid = validate_webhook_payload(data)
-    if not valid["valid"]:
-        logger.error(f"[BAD_PAYLOAD] {valid['error']}")
-        add_system_log('error', f'âŒ [400] Webhook validation failed: {valid["error"][:80]}')
-        email_handler.send_alert("Bad Webhook Payload", f"Validation failed: {valid['error']}")
-        return jsonify({'error': valid['error']}), 400
-
-    # ============= Global Secret Key Validation =============
-    # ตรวจสอบ Global Secret Key (ใช้ครั้งเดียวสำหรับทุก account)
-    provided_secret = data.get('secret', '')
-    if not session_manager.validate_global_secret(provided_secret):
-        logger.warning("[UNAUTHORIZED] Invalid global secret key")
-        add_system_log('error', '🔐 [403] Webhook unauthorized - Invalid global secret key')
-        email_handler.send_alert("Webhook Secret Key Validation Failed",
-                               "Invalid global secret key provided in webhook request")
-        return jsonify({'error': 'Unauthorized - Invalid secret key'}), 403
-
-    logger.info("[SECRET_VALIDATED] ✅ Global secret key validated")
-
-    # ดึง account สำหรับ Symbol Mapping
-    account_for_mapping = None
-    if isinstance(data.get('account_number'), (str, int)):
-        account_for_mapping = str(data.get('account_number')).strip()
-    elif isinstance(data.get('accounts'), list) and len(data.get('accounts')) > 0:
-        account_for_mapping = str(data['accounts'][0]).strip()
-
-    # ============= Symbol Mapping =============
-    # แปลง Symbol ตาม mapping ที่ตั้งไว้ (ถ้ามี)
-    if account_for_mapping and 'symbol' in data:
-        original_symbol = data['symbol']
-        mapped_symbol = session_manager.map_symbol(account_for_mapping, original_symbol)
-
-        if mapped_symbol != original_symbol:
-            data['symbol'] = mapped_symbol
-            logger.info(f"[SYMBOL_MAPPED] {original_symbol} → {mapped_symbol} for account {account_for_mapping}")
-            add_system_log('info', f'🔄 Symbol mapped: {original_symbol} → {mapped_symbol} (Acc: {account_for_mapping})')
-    # ⭐ Translate symbol for target account (immediately after token & payload validation)
-    try:
-        account = None
-        if isinstance(data.get('account_number'), (str, int)):
-            account = str(data.get('account_number')).strip()
-        elif isinstance(data.get('accounts'), list) and len(data.get('accounts')) == 1:
-            account = str(data['accounts'][0]).strip()
-        if account and 'symbol' in data:
-            translated_signal = signal_translator.translate_for_account(
-                data,
-                account,
-                auto_map_symbol=True
-            )
-            if not translated_signal:
-                logger.warning(f"[WEBHOOK] Symbol {data.get('symbol')} not available in account {account}")
-                add_system_log('error', f'❌ [400] Symbol not available')
-                return jsonify({'error': 'Symbol not available in target account'}), 400
-            data['symbol'] = translated_signal.get('symbol', data['symbol'])
-            data['original_symbol'] = translated_signal.get('original_symbol')
-    except Exception as _e_tr:
-        logger.error(f"[WEBHOOK_TRANSLATE_ERROR] {_e_tr}", exc_info=True)
-
-
-    # ✅ อัพเดท heartbeat สำหรับบัญชีที่ส่ง webhook มา
-    account = data.get('account_number') or (data.get('accounts', [None])[0] if data.get('accounts') else None)
-    if account:
-        session_manager.update_account_heartbeat(str(account))
-
-    # target accounts
-    target_accounts = data.get('accounts') or [data.get('account_number')]
-
-    allowed, blocked = [], []
-
-    # âœ… à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸šà¹à¸•à¹ˆà¸¥à¸° account à¸§à¹ˆà¸²à¸­à¸¢à¸¹à¹ˆà¹ƒà¸™ Webhook Management à¸«à¸£à¸·à¸­à¹„à¸¡à¹ˆ
-    for acc in target_accounts:
-        acc_str = str(acc).strip()
-
-        if not is_account_allowed_for_webhook(acc_str):
-            blocked.append(acc_str)
-
-            # ðŸ”´ à¸šà¸±à¸™à¸—à¸¶à¸ Error à¸¥à¸‡ Trade History
-            record_and_broadcast({
-                'status': 'error',
-                'action': str(data.get('action', 'UNKNOWN')).upper(),
-                'symbol': data.get('symbol', '-'),
-                'account': acc_str,
-                'volume': data.get('volume', ''),
-                'price': data.get('price', ''),
-                'tp': data.get('take_profit', ''),
-                'sl': data.get('stop_loss', ''),
-                'message': 'Account not in Webhook Management'
-            })
-
-            logger.error(f"[WEBHOOK_ERROR] Account {acc_str} not in Webhook Management")
-            add_system_log('warning', f'âš ï¸ [403] Webhook blocked - Account {acc_str} not in whitelist')
-
-            continue
-
-        # Check if account is PAUSED
-        account_info = session_manager.get_account_info(acc_str)
-        if account_info and account_info.get("status") == "PAUSE":
-            blocked.append(acc_str)
-            record_and_broadcast({
-                "status": "error",
-                "action": str(data.get("action", "UNKNOWN")).upper(),
-                "symbol": data.get("symbol", "-"),
-                "account": acc_str,
-                "volume": data.get("volume", ""),
-                "price": data.get("price", ""),
-                "tp": data.get("take_profit", ""),
-                "sl": data.get("stop_loss", ""),
-                "message": "Account Paused"
-            })
-            logger.warning(f"[WEBHOOK_BLOCKED] Account {acc_str} is PAUSED")
-            add_system_log("warning", f"[403] Webhook blocked - Account {acc_str} is paused")
-            continue
-
-        # ⚠️ Check if account can receive orders (must have received Symbol data)
-        can_receive, reason = session_manager.can_receive_orders(acc_str)
-        if not can_receive:
-            blocked.append(acc_str)
-            record_and_broadcast({
-                "status": "error",
-                "action": str(data.get("action", "UNKNOWN")).upper(),
-                "symbol": data.get("symbol", "-"),
-                "account": acc_str,
-                "volume": data.get("volume", ""),
-                "price": data.get("price", ""),
-                "tp": data.get("take_profit", ""),
-                "sl": data.get("stop_loss", ""),
-                "message": f"{reason}"
-            })
-            logger.warning(f"[WEBHOOK_BLOCKED] Account {acc_str} cannot receive orders: {reason}")
-            add_system_log("warning", f"[403] Webhook blocked - Account {acc_str}: {reason}")
-            continue
-
-        # Account is allowed and not paused
-        allowed.append(acc_str)
-    if not allowed:
-        error_msg = f"No allowed accounts for webhook. Blocked: {', '.join(blocked)}"
-        logger.error(f"[WEBHOOK_ERROR] {error_msg}")
-        add_system_log('error', f'âŒ [400] Webhook rejected - All accounts blocked ({len(blocked)} accounts)')
-        return jsonify({'error': error_msg}), 400
-
-    # à¸ªà¹ˆà¸‡à¸•à¹ˆà¸­à¹€à¸‰à¸žà¸²à¸°à¸šà¸±à¸à¸Šà¸µà¸—à¸µà¹ˆà¸œà¹ˆà¸²à¸™à¸à¸²à¸£à¸­à¸™à¸¸à¸¡à¸±à¸•à¸´
-    data_processed = dict(data)
-    if 'accounts' in data_processed:
-        data_processed['accounts'] = allowed
-    else:
-        data_processed['account_number'] = allowed[0]
-
-
-    result = process_webhook(data_processed)
-
-    if result.get('success'):
-        msg = result.get('message', 'Processed')
-        action = data_processed.get('action', 'UNKNOWN')
-        symbol = data_processed.get('symbol', '-')
-        volume = data_processed.get('volume', '-')
-        add_system_log('success', f'âœ… [200] Webhook processed: {action} {symbol} Vol:{volume} â†’ {len(allowed)} account(s)')
-        if blocked:
-            msg += f" (âš ï¸ Blocked {len(blocked)} account(s): {', '.join(blocked)})"
-            add_system_log('warning', f'âš ï¸ Webhook partial: {len(blocked)} account(s) blocked')
-        return jsonify({'success': True, 'message': msg})
-    else:
-        error_msg = result.get('error', 'Unknown error')
-        add_system_log('error', f'âŒ [500] Webhook processing failed: {error_msg[:80]}')
-        return jsonify({'error': result.get('error', 'Processing failed')}), 500
-
-    try:
-        data = request.get_json()
-        if not data:
-            raise ValueError("No JSON data received")
-    except Exception as e:
-        logger.error(f"[BAD_PAYLOAD] {e}")
-        add_system_log('error', f'âŒ [400] Webhook bad request - Invalid JSON: {str(e)[:80]}')
-        email_handler.send_alert("Bad Webhook Payload", f"Invalid JSON: {e}")
-
-        # พยายามดึงข้อมูลจาก raw request data
-        raw_data = request.get_data(as_text=True)
-        account = '-'
-        action = 'UNKNOWN'
-        symbol = '-'
-        volume = ''
-        price = ''
-        tp = ''
-        sl = ''
-
-        # พยายาม parse แบบหละหลวม
-        try:
-            import re
-            # ดึง account number
-            acc_match = re.search(r'"account(?:_number)?"\s*:\s*"?(\d+)"?', raw_data)
-            if acc_match:
-                account = acc_match.group(1)
-
-            # ดึง action
-            action_match = re.search(r'"action"\s*:\s*"([^"]+)"', raw_data)
-            if action_match:
-                action = action_match.group(1).upper()
-
-            # ดึง symbol
-            symbol_match = re.search(r'"symbol"\s*:\s*"([^"]+)"', raw_data)
-            if symbol_match:
-                symbol = symbol_match.group(1)
-
-            # ดึง volume
-            vol_match = re.search(r'"volume"\s*:\s*"?([0-9.]+)"?', raw_data)
-            if vol_match:
-                volume = vol_match.group(1)
-
-            # ดึง price
-            price_match = re.search(r'"price"\s*:\s*"?([0-9.]+)"?', raw_data)
-            if price_match:
-                price = price_match.group(1)
-
-            # ดึง take_profit / tp
-            tp_match = re.search(r'"(?:take_profit|tp)"\s*:\s*"?([0-9.]+)"?', raw_data)
-            if tp_match:
-                tp = tp_match.group(1)
-
-            # ดึง stop_loss / sl
-            sl_match = re.search(r'"(?:stop_loss|sl)"\s*:\s*"?([0-9.]+)"?', raw_data)
-            if sl_match:
-                sl = sl_match.group(1)
-        except:
-            pass
-
-        # บันทึก Invalid JSON Error ลง Trading History
-        record_and_broadcast({
-            'status': 'error',
-            'action': action,
-            'symbol': symbol,
-            'account': account,
-            'volume': volume,
-            'price': price,
-            'tp': tp,
-            'sl': sl,
-            'message': 'Invalid JSON'
-        })
-
-        return jsonify({'error': 'Invalid JSON payload'}), 400
-
-    logger.info(f"[WEBHOOK] {json.dumps(data, ensure_ascii=False)}")
-
-    valid = validate_webhook_payload(data)
-    if not valid["valid"]:
-        logger.error(f"[BAD_PAYLOAD] {valid['error']}")
-        add_system_log('error', f'âŒ [400] Webhook validation failed: {valid["error"][:80]}')
-        email_handler.send_alert("Bad Webhook Payload", f"Validation failed: {valid['error']}")
-        return jsonify({'error': valid['error']}), 400
-
-    # target accounts (à¸£à¸­à¸‡à¸£à¸±à¸š accounts: [] à¸«à¸£à¸·à¸­ account_number à¹€à¸”à¸µà¹ˆà¸¢à¸§)
-    target_accounts = data.get('accounts') or [data.get('account_number')]
-
-    allowed, blocked = [], []
-    for acc in target_accounts:
-        if is_account_allowed_for_webhook(acc):
-            allowed.append(acc)
-        else:
-            blocked.append(acc)
-            record_and_broadcast({
-                'status': 'error', 'action': str(data.get('action')).upper(),
-                'symbol': data.get('symbol', '-'), 'account': str(acc),
-                'volume': data.get('volume', ''), 'price': data.get('price', ''),
-                'tp': data.get('take_profit', ''), 'sl': data.get('stop_loss', ''),
-                'message': 'Account not allowed in Webhook Management'
-            })
-
-    if not allowed:
-        return jsonify({'error': 'No allowed accounts for webhook'}), 400
-
-    # à¸ªà¹ˆà¸‡à¸•à¹ˆà¸­à¹€à¸‰à¸žà¸²à¸°à¸šà¸±à¸à¸Šà¸µà¸—à¸µà¹ˆà¸œà¹ˆà¸²à¸™à¸à¸²à¸£à¸­à¸™à¸¸à¸à¸²à¸•
-    data_processed = dict(data)
-    if 'accounts' in data_processed:
-        data_processed['accounts'] = allowed
-    else:
-        data_processed['account_number'] = allowed[0]
-
-    result = process_webhook(data_processed)
-    if result.get('success'):
-        msg = result.get('message', 'Processed')
-        if blocked:
-            msg += f" (blocked {len(blocked)} account(s))"
-        return jsonify({'success': True, 'message': msg})
-    else:
-        return jsonify({'error': result.get('error', 'Processing failed')}), 500
-
-# =================== Broker Data Registration ===================
-
-@app.post('/api/broker/register')
-@limiter.limit("10 per minute")
-def register_broker_data():
-    """
-    รับข้อมูลโบรกเกอร์จาก EA (Scanner)
-    
-    Payload:
-    {
-        "account": "12345678",
-        "broker": "XM Global",
-        "server": "XMGlobal-Real 1",
-        "symbols": [
-            {
-                "name": "EURUSD",
-                "contract_size": 100000,
-                "volume_min": 0.01,
-                "volume_max": 100.0,
-                "volume_step": 0.01
-            }
-        ]
-    }
-    """
-    try:
-        data = request.get_json(force=True)
-        
-        account = str(data.get('account', '')).strip()
-        
-        if not account:
-            logger.warning("[BROKER_REGISTER] Account number missing")
-            return jsonify({'error': 'Account number required'}), 400
-        
-        # บันทึกข้อมูล
-        success = broker_manager.save_broker_info(account, data)
-
-        if success:
-            symbol_count = len(data.get('symbols', []))
-            broker_name = data.get('broker', 'Unknown')
-
-            # ✅ Activate account เมื่อได้รับ Symbol data
-            # นี่คือสิ่งที่ทำให้ account เปลี่ยนจาก "Wait for Activate" → "Online"
-            if symbol_count > 0 and session_manager.account_exists(account):
-                first_symbol = data.get('symbols', [{}])[0].get('name', '')
-                account_info = session_manager.get_account_info(account)
-                was_waiting = account_info and account_info.get('status') == 'Wait for Activate'
-
-                session_manager.activate_by_symbol(account, broker_name, first_symbol)
-
-                if was_waiting:
-                    add_system_log('success', f'🟢 [EA] Account {account} activated by Symbol data (Broker: {broker_name}, {symbol_count} symbols)')
-                    logger.info(f"[BROKER_REGISTER] ✅ Account {account} ACTIVATED by Symbol data")
-
-                    # ส่ง email แจ้งเตือน
-                    email_handler.send_alert(
-                        "Account Activated by Symbol",
-                        f"Account {account} activated by Symbol data\nBroker: {broker_name}\nSymbols: {symbol_count}"
-                    )
-
-            add_system_log(
-                'success',
-                f'✅ [200] Broker data registered: Account {account} '
-                f'({broker_name}, {symbol_count} symbols)'
-            )
-            
-            return jsonify({
-                'success': True,
-                'message': f'Broker data saved for account {account}',
-                'symbol_count': symbol_count
-            }), 200
-        else:
-            return jsonify({'error': 'Failed to save broker data'}), 500
-            
-    except Exception as e:
-        logger.error(f"[BROKER_REGISTER] Error: {e}", exc_info=True)
-        add_system_log('error', f'❌ [500] Broker data registration failed: {str(e)}')
-        return jsonify({'error': str(e)}), 500
-
-
-@app.get('/api/broker/<account>')
-@session_login_required
-def get_broker_data(account):
-    """ดึงข้อมูลโบรกเกอร์ของบัญชี"""
-    try:
-        broker_info = broker_manager.get_broker_info(account)
-        
-        if broker_info:
-            return jsonify({'success': True, 'data': broker_info}), 200
-        else:
-            return jsonify({'error': 'Broker data not found'}), 404
-            
-    except Exception as e:
-        logger.error(f"[BROKER_DATA] Error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.get('/api/broker/stats')
-@session_login_required
-def get_broker_stats():
-    """ดึงสถิติข้อมูลโบรกเกอร์"""
-    try:
-        stats = broker_manager.get_stats()
-        return jsonify({'success': True, 'stats': stats}), 200
-    except Exception as e:
-        logger.error(f"[BROKER_STATS] Error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-# =================== Account Balance API ===================
-
-@app.post('/api/account/balance')
-@limiter.limit("60 per minute")
-def update_account_balance():
-    """
-    รับข้อมูล account balance จาก EA
-
-    Payload:
-    {
-        "account": "12345678",
-        "balance": 10000.50,
-        "equity": 10050.25,
-        "margin": 500.00,
-        "free_margin": 9550.25,
-        "currency": "USD"
-    }
-    """
-    try:
-        data = request.get_json(force=True)
-
-        account = str(data.get('account', '')).strip()
-        balance = data.get('balance')
-
-        if not account:
-            logger.warning("[BALANCE_UPDATE] Account number missing")
-            return jsonify({'error': 'Account number required'}), 400
-
-        if balance is None:
-            logger.warning("[BALANCE_UPDATE] Balance missing")
-            return jsonify({'error': 'Balance required'}), 400
-
-        try:
-            balance = float(balance)
-        except (ValueError, TypeError):
-            logger.warning(f"[BALANCE_UPDATE] Invalid balance value: {balance}")
-            return jsonify({'error': 'Balance must be a number'}), 400
-
-        # อัพเดท balance
-        success = balance_manager.update_balance(
-            account=account,
-            balance=balance,
-            equity=data.get('equity'),
-            margin=data.get('margin'),
-            free_margin=data.get('free_margin'),
-            currency=data.get('currency')
-        )
-
-        if success:
-            logger.info(
-                f"[BALANCE_UPDATE] ✅ Account {account} "
-                f"Balance={balance:.2f} Currency={data.get('currency', 'N/A')}"
-            )
-
-            return jsonify({
-                'success': True,
-                'message': f'Balance updated for account {account}'
-            }), 200
-        else:
-            return jsonify({'error': 'Failed to update balance'}), 500
-
-    except Exception as e:
-        logger.error(f"[BALANCE_UPDATE] Error: {e}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
-
-
-@app.get('/api/account/<account>/balance')
-@session_login_required
-def get_account_balance(account):
-    """ดึงข้อมูล balance ของ account"""
-    try:
-        balance_info = balance_manager.get_balance_info(account)
-
-        if balance_info:
-            return jsonify({'success': True, 'data': balance_info}), 200
-        else:
-            return jsonify({'error': 'Balance data not found or expired'}), 404
-
-    except Exception as e:
-        logger.error(f"[BALANCE_GET] Error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.get('/api/account/balance/all')
-@session_login_required
-def get_all_account_balances():
-    """ดึงข้อมูล balance ของทุก account"""
-    try:
-        balances = balance_manager.get_all_balances()
-        return jsonify({'success': True, 'data': balances}), 200
-    except Exception as e:
-        logger.error(f"[BALANCE_GET_ALL] Error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.get('/api/account/balance/status')
-@session_login_required
-def get_balance_manager_status():
-    """ดึงสถานะของ Balance Manager"""
-    try:
-        status = balance_manager.get_status()
-        return jsonify({'success': True, 'status': status}), 200
-    except Exception as e:
-        logger.error(f"[BALANCE_STATUS] Error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-# =================== webhook utils ===================
-def normalize_action(action: str) -> str:
-    """
-    Normalize action aliases to standard actions
-    - CALL -> BUY
-    - PUT -> SELL
-    """
-    if not action:
-        return action
-
-    action_upper = str(action).upper().strip()
-
-    # Action aliases mapping
-    action_aliases = {
-        'CALL': 'BUY',
-        'PUT': 'SELL',
-    }
-
-    return action_aliases.get(action_upper, action_upper)
-
-
-def validate_webhook_payload(data):
-    required_fields = ['action']
-    if 'account_number' not in data and 'accounts' not in data:
-        return {'valid': False, 'error': 'Missing field: account_number or accounts'}
-    for field in required_fields:
-        if field not in data:
-            return {'valid': False, 'error': f'Missing field: {field}'}
-
-    # Normalize action aliases (call->buy, put->sell)
-    action = normalize_action(data['action'])
-    data['action'] = action  # Update data with normalized action
-    if action in ['BUY', 'SELL', 'LONG', 'SHORT']:
-        if 'symbol' not in data:
-            return {'valid': False, 'error': 'symbol required for trading actions'}
-        if 'volume' not in data:
-            return {'valid': False, 'error': 'volume required for trading actions'}
-        data.setdefault('order_type', 'market')
-        order_type = str(data.get('order_type', 'market')).lower()
-        if order_type in ['limit', 'stop'] and 'price' not in data:
-            return {'valid': False, 'error': f'price required for {order_type} orders'}
-        try:
-            vol = float(data['volume'])
-            if vol <= 0:
-                return {'valid': False, 'error': 'Volume must be positive'}
-        except Exception:
-            return {'valid': False, 'error': 'Volume must be a number'}
-
-    elif action in ['CLOSE', 'CLOSE_ALL', 'CLOSE_SYMBOL']:
-        if action == 'CLOSE':
-            if 'ticket' not in data and 'symbol' not in data:
-                return {'valid': False, 'error': 'ticket or symbol required for CLOSE action'}
-            if 'ticket' in data:
-                try:
-                    int(data['ticket'])
-                except Exception:
-                    return {'valid': False, 'error': 'ticket must be a number'}
-        if action == 'CLOSE_SYMBOL' and 'symbol' not in data:
-            return {'valid': False, 'error': 'symbol required for CLOSE_SYMBOL action'}
-        if 'volume' in data:
-            try:
-                vol = float(data['volume'])
-                if vol <= 0:
-                    return {'valid': False, 'error': 'Volume must be positive'}
-            except Exception:
-                return {'valid': False, 'error': 'Volume must be a number'}
-        if 'position_type' in data:
-            pt = str(data['position_type']).upper()
-            if pt not in ['BUY', 'SELL']:
-                return {'valid': False, 'error': 'position_type must be BUY or SELL'}
-    else:
-        return {'valid': False, 'error': 'Invalid action. Must be one of: BUY, SELL, LONG, SHORT, CALL, PUT, CLOSE, CLOSE_ALL, CLOSE_SYMBOL'}
-
-    return {'valid': True}
-
-
-# =================== webhook core ===================
-def process_webhook(data):
-    """
-    à¸ªà¹ˆà¸‡à¸„à¸³à¸ªà¸±à¹ˆà¸‡à¹„à¸›à¸¢à¸±à¸‡ EA à¸•à¸²à¸¡ accounts à¸—à¸µà¹ˆà¸à¸³à¸«à¸™à¸” à¸žà¸£à¹‰à¸­à¸¡à¸šà¸±à¸™à¸—à¸¶à¸à¸¥à¸‡ history
-    """
-    try:
-        target_accounts = data['accounts'] if 'accounts' in data else [data['account_number']]
-        action = str(data['action']).upper()
-
-                # ✅ ใช้ symbol ที่ translate แล้วจาก webhook handler
-        mapped_symbol = data.get('symbol')  # ใช้ symbol ที่ผ่าน translate แล้ว
-
-        results = []
-
-        for account in target_accounts:
-            account_str = str(account).strip()
-
-            # ðŸ”´ 1. à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸šà¸§à¹ˆà¸²à¸šà¸±à¸à¸Šà¸µà¸¡à¸µà¸­à¸¢à¸¹à¹ˆà¹ƒà¸™à¸£à¸°à¸šà¸šà¸«à¸£à¸·à¸­à¹„à¸¡à¹ˆ
-            if not session_manager.account_exists(account_str):
-                error_msg = f'Account {account_str} not found in system'
-                logger.error(f"[WEBHOOK_ERROR] {error_msg}")
-
-                record_and_broadcast({
-                    'status': 'error',
-                    'action': action,
-                    'symbol': data.get('symbol', '-'),
-                    'account': account_str,
-                    'volume': data.get('volume', ''),
-                    'price': data.get('price', ''),
-                    'message': f'âŒ {error_msg}'
-                })
-
-                results.append({'account': account_str, 'success': False, 'error': error_msg})
-                continue
-
-            # Check status column first (more reliable than heartbeat)
-            account_info = session_manager.get_account_info(account_str)
-            account_status = account_info.get('status', '') if account_info else ''
-
-            if account_status == 'Offline':
-                error_msg = f'Account {account_str} Offline'
-                logger.warning(f"[WEBHOOK_ERROR] {error_msg}")
-
-                record_and_broadcast({
-                    'status': 'error',
-                    'action': action,
-                    'symbol': data.get('symbol', '-'),
-                    'account': account_str,
-                    'volume': data.get('volume', ''),
-                    'price': data.get('price', ''),
-                    'message': 'Account Offline'
-                })
-
-                results.append({'account': account_str, 'success': False, 'error': error_msg})
-                continue
-
-            # Backup check: heartbeat
-            if not session_manager.is_instance_alive(account_str):
-                error_msg = f'Account {account_str} Offline'
-                logger.warning(f"[WEBHOOK_ERROR] {error_msg}")
-
-                record_and_broadcast({
-                    'status': 'error',
-                    'action': action,
-                    'symbol': data.get('symbol', '-'),
-                    'account': account_str,
-                    'volume': data.get('volume', ''),
-                    'price': data.get('price', ''),
-                    'message': 'Account Offline'
-                })
-
-                results.append({'account': account_str, 'success': False, 'error': error_msg})
-                continue
-
-
-            # âœ… à¸šà¸±à¸à¸Šà¸µà¸œà¹ˆà¸²à¸™à¸à¸²à¸£à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸š - à¸ªà¹ˆà¸‡à¸„à¸³à¸ªà¸±à¹ˆà¸‡
-            cmd = prepare_trading_command(data, mapped_symbol, account_str)
-            ok = write_command_for_ea(account_str, cmd)
-
-            if ok:
-                record_and_broadcast({
-                    'status': 'success',
-                    'action': action,
-                    'order_type': data.get('order_type', 'market'),
-                    'symbol': mapped_symbol or data.get('symbol', '-'),
-                    'account': account_str,
-                    'volume': data.get('volume', ''),
-                    'price': data.get('price', ''),
-                    'tp': data.get('take_profit', ''),
-                    'sl': data.get('stop_loss', ''),
-                    'message': f'{action} command sent to EA'
-                })
-
-                results.append({'account': account_str, 'success': True, 'command': cmd, 'action': action})
-            else:
-                error_msg = 'Failed to write command file'
-
-                record_and_broadcast({
-                    'status': 'error',
-                    'action': action,
-                    'order_type': data.get('order_type', 'market'),
-                    'symbol': mapped_symbol or data.get('symbol', '-'),
-                    'account': account_str,
-                    'volume': data.get('volume', ''),
-                    'price': data.get('price', ''),
-                    'tp': data.get('take_profit', ''),
-                    'sl': data.get('stop_loss', ''),
-                    'message': f'{error_msg}'
-                })
-
-                results.append({'account': account_str, 'success': False, 'error': error_msg})
-
-        # à¸ªà¸£à¸¸à¸›à¸œà¸¥à¸¥à¸±à¸žà¸˜à¹Œ
-        success_count = sum(1 for r in results if r['success'])
-        total_count = len(results)
-
-        if success_count == total_count:
-            return {'success': True, 'message': f'{action} sent to {success_count}/{total_count} accounts'}
-        elif success_count > 0:
-            return {'success': True, 'message': f'{action} partial success: {success_count}/{total_count} accounts'}
-        else:
-            return {'success': False, 'error': f'Failed to send {action} to any account'}
-
-    except Exception as e:
-        logger.error(f"[WEBHOOK_ERROR] {e}", exc_info=True)
-        return {'success': False, 'error': str(e)}
-
-                # ✅ ใช้ symbol ที่ translate แล้วจาก webhook handler
-        mapped_symbol = data.get('symbol')  # ใช้ symbol ที่ผ่าน translate แล้ว
-
-        results = []
-        for account in target_accounts:
-            # à¸•à¸£à¸§à¸ˆà¸§à¹ˆà¸²à¸¡à¸µà¸šà¸±à¸à¸Šà¸µà¹ƒà¸™ server à¹à¸¥à¸° online
-            if not session_manager.account_exists(account):
-                record_and_broadcast({
-                    'status': 'error', 'action': action,
-                    'symbol': data.get('symbol', '-'), 'account': account,
-                    'volume': data.get('volume', ''), 'price': data.get('price', ''),
-                    'tp': data.get('take_profit', ''), 'sl': data.get('stop_loss', ''),
-                    'message': 'Account not found'
-                })
-                results.append({'account': account, 'success': False, 'error': 'Account not found'})
-                continue
-
-            if not session_manager.is_instance_alive(account):
-                record_and_broadcast({
-                    'status': 'error', 'action': action,
-                    'symbol': data.get('symbol', '-'), 'account': account,
-                    'volume': data.get('volume', ''), 'price': data.get('price', ''),
-                    'tp': data.get('take_profit', ''), 'sl': data.get('stop_loss', ''),
-                    'message': 'Account is offline'
-                })
-                results.append({'account': account, 'success': False, 'error': 'Account is offline'})
-                continue
-
-            cmd = prepare_trading_command(data, mapped_symbol, account)
-            ok = write_command_for_ea(account, cmd)
-
-            if ok:
-                record_and_broadcast({
-                    'status': 'success', 'action': action,
-                    'order_type': data.get('order_type', 'market'),
-                    'symbol': mapped_symbol or data.get('symbol', '-'), 'account': account,
-                    'volume': data.get('volume', ''), 'price': data.get('price', ''),
-                    'tp': data.get('take_profit', ''), 'sl': data.get('stop_loss', ''),
-                    'message': f'{action} command sent to EA'
-                })
-
-            results.append({'account': account, 'success': bool(ok), 'command': cmd, 'action': action})
-
-        success_count = sum(1 for r in results if r['success'])
-        total_count = len(results)
-        if success_count == total_count:
-            return {'success': True, 'message': f'{action} sent to {success_count}/{total_count} accounts'}
-        elif success_count > 0:
-            return {'success': True, 'message': f'{action} partial success: {success_count}/{total_count} accounts'}
-        else:
-            return {'success': False, 'error': f'Failed to send {action} to any account'}
-
-    except Exception as e:
-        return {'success': False, 'error': str(e)}
-
-
-def prepare_trading_command(data, mapped_symbol, account):
-    action = str(data['action']).upper()
-    # Normalize LONG/SHORT to BUY/SELL for EA compatibility
-    if action == 'LONG':
-        action = 'BUY'
-    elif action == 'SHORT':
-        action = 'SELL'
-
-    # Coerce volume to float if possible
-    vol = data.get('volume')
-    try:
-        volume = float(vol) if vol is not None else None
-    except Exception:
-        volume = vol  # keep original; EA may handle/raise
-
-    command = {
-        'timestamp': datetime.now().isoformat(),
-        'action': action,
-        'account': str(account),
-        'symbol': (mapped_symbol or data.get('symbol')),
-        'order_type': str(data.get('order_type', 'market')).lower(),
-        'volume': volume,
-        'price': data.get('price'),
-        'take_profit': data.get('take_profit'),
-        'stop_loss': data.get('stop_loss'),
-        'ticket': data.get('ticket'),
-        'position_type': data.get('position_type'),
-        'comment': data.get('comment', '')
-    }
-    return command
-
-
-
-
-def write_command_for_ea(account, command):
-    """
-    ส่งคำสั่งไปยัง EA ผ่าน API Command Queue
-
-    EA จะ poll คำสั่งจาก GET /api/commands/<account> แทนการอ่านไฟล์
-
-    Args:
-        account: หมายเลขบัญชี
-        command: คำสั่งการเทรด (dict)
-
-    Returns:
-        bool: True ถ้าส่งสำเร็จ
-    """
-    try:
-        account = str(account)
-
-        # ส่งคำสั่งเข้า Command Queue (API Mode เท่านั้น)
-        success = command_queue.add_command(account, command)
-
-        if success:
-            logger.info(
-                f"[WRITE_CMD] ✅ Added to queue: {command.get('action')} "
-                f"{command.get('symbol')} for {account}"
-            )
-        else:
-            logger.error(f"[WRITE_CMD] ❌ Failed to add to queue for {account}")
-
-        return success
-
-    except Exception as e:
-        logger.error(f"[WRITE_CMD_ERROR] {e}")
-        return False
-
-
-
+# ⚠️ WEBHOOK ROUTES MOVED TO: app/modules/webhooks/routes.py
+# ⚠️ WEBHOOK SERVICES MOVED TO: app/modules/webhooks/services.py
+#
+# Old routes removed:
+# - GET /webhook-accounts
+# - POST /webhook-accounts
+# - DELETE /webhook-accounts/<account>
+# - GET /webhook-url
+# - GET /webhook
+# - GET /webhook/health
+# - POST /webhook/<token>
+#
+# Old functions removed:
+# - list_webhook_accounts()
+# - add_webhook_account()
+# - delete_webhook_account()
+# - get_webhook_url()
+# - webhook_info()
+# - webhook_health()
+# - webhook_handler()
+# - validate_webhook_payload()
+# - normalize_action()
+# - process_webhook()
+# - prepare_trading_command()
+# - write_command_for_ea()
+#
+# All webhook functionality now handled by webhooks_bp Blueprint
+# =================================================================
 
 
 # =================== Copy Trading API Endpoints ===================
+# ⚠️ COPY TRADING ROUTES MOVED TO: app/copy_trading/routes.py
+#
+# Old routes removed (now in copy_trading_bp Blueprint):
+# - GET /api/pairs - List copy pairs
+# - POST /api/pairs - Create copy pair
+# - PUT /api/pairs/<pair_id> - Update copy pair
+# - DELETE /api/pairs/<pair_id> - Delete copy pair
+# - POST /api/pairs/<pair_id>/toggle - Toggle pair status
+# - POST /api/pairs/<pair_id>/add-master - Add master to pair
+# - POST /api/pairs/<pair_id>/add-slave - Add slave to pair
+# - GET /api/copy/master-accounts - List master accounts
+# - POST /api/copy/master-accounts - Add master account
+# - DELETE /api/copy/master-accounts/<account_id> - Delete master
+# - GET /api/copy/slave-accounts - List slave accounts
+# - POST /api/copy/slave-accounts - Add slave account
+# - DELETE /api/copy/slave-accounts/<account_id> - Delete slave
+# - POST /api/copy/trade - Copy trade signal endpoint
+# - GET /api/copy/history - Get copy history
+# - POST /api/copy/history/clear - Clear history
+# - POST /copy-history/clear - Legacy clear history
+#
+# Total: 17 endpoints moved to copy_trading_bp Blueprint
+# All functionality preserved with authentication
+# =================================================================
+
+# NOTE: SSE endpoint below intentionally kept in server.py (not a REST endpoint)
 
 @app.get('/api/pairs')
 @session_login_required
@@ -2296,7 +1441,7 @@ def get_copy_history():
 @app.post('/api/copy/history/clear')
 @session_login_required
 def clear_copy_history():
-    """à¸¥à¸šà¸›à¸£à¸°à¸§à¸±à¸•à¸´à¸à¸²à¸£à¸„à¸±à¸”à¸¥à¸­à¸à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”"""
+    """à¸¥à¸šà¸›à¸£à¸°à¸§à¸±à¸•à¸´à¸à¸²à¸£à¸„à¸±à¸”à¸¥à¸­à¸à¸—à¸±à¹‰à¸«à¸¡à¸”"""
     try:
         confirm = request.args.get('confirm')
         if confirm != '1':
@@ -2674,7 +1819,7 @@ def add_system_log(log_type, message):
 
 
 def _broadcast_system_log(log_entry):
-    """à¸ªà¹ˆà¸‡ log à¹„à¸›à¸¢à¸±à¸‡ SSE clients à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”"""
+    """à¸ªà¹ˆà¸‡ log à¹„à¸›à¸¢à¸±à¸‡ SSE clients à¸—à¸±à¹‰à¸«à¸¡à¸”"""
     data = f"data: {json.dumps(log_entry)}\n\n"
     
     with sse_system_lock:
@@ -2719,7 +1864,7 @@ def get_system_logs():
 @app.post('/api/system/logs/clear')
 @session_login_required
 def clear_system_logs():
-    """à¸¥à¹‰à¸²à¸‡ system logs à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”"""
+    """à¸¥à¹‰à¸²à¸‡ system logs à¸—à¸±à¹‰à¸«à¸¡à¸”"""
     try:
         with system_logs_lock:
             system_logs.clear()
@@ -2788,554 +1933,3 @@ def sse_system_logs():
 
 
 # à¹€à¸žà¸´à¹ˆà¸¡ initial logs à¹€à¸¡à¸·à¹ˆà¸­ server à¹€à¸£à¸´à¹ˆà¸¡à¸—à¸³à¸‡à¸²à¸™
-add_system_log('info', 'System started successfully')
-add_system_log('success', 'Connected to MT5 server')
-add_system_log('info', 'Webhook endpoint initialized')
-add_system_log('info', 'Copy trading service active')
-add_system_log('info', 'Monitoring active connections')
-
-# =================== END SYSTEM LOGS API ===================
-
-
-# =================== COMMAND QUEUE API (NEW - สำหรับ EA Poll คำสั่ง) ===================
-
-from app.command_queue import command_queue
-
-@app.get('/api/commands/<account>')
-@limiter.limit(get_command_api_rate_limit)  # Dynamic rate limit from settings
-def get_commands_for_ea(account: str):
-    """
-    API สำหรับ EA มา poll คำสั่งที่รออยู่
-
-    EA จะเรียก endpoint นี้ทุกๆ 1-2 วินาทีเพื่อเช็คว่ามีคำสั่งใหม่หรือไม่
-
-    Args:
-        account: หมายเลขบัญชี MT5
-
-    Query Parameters:
-        limit: จำนวนคำสั่งสูงสุดที่จะดึง (default: 10)
-
-    Returns:
-        {
-            "success": true,
-            "account": "123456",
-            "commands": [
-                {
-                    "queue_id": "...",
-                    "action": "BUY",
-                    "symbol": "BTCUSD",
-                    "volume": 0.01,
-                    ...
-                }
-            ],
-            "count": 1
-        }
-    """
-    try:
-        account = str(account).strip()
-        limit = int(request.args.get('limit', 10))
-
-        # ตรวจสอบว่าบัญชีมีอยู่ในระบบ
-        if not session_manager.account_exists(account):
-            logger.warning(f"[COMMAND_API] Account {account} not found")
-            return jsonify({
-                'success': False,
-                'error': 'Account not found'
-            }), 404
-
-        # ดึงคำสั่งที่รออยู่
-        commands = command_queue.get_pending_commands(account, limit=limit)
-
-        logger.debug(f"[COMMAND_API] Retrieved {len(commands)} command(s) for {account}")
-
-        return jsonify({
-            'success': True,
-            'account': account,
-            'commands': commands,
-            'count': len(commands)
-        })
-
-    except Exception as e:
-        logger.error(f"[COMMAND_API] Error getting commands for {account}: {e}", exc_info=True)
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@app.post('/api/commands/<account>/ack')
-def acknowledge_command(account: str):
-    """
-    API สำหรับ EA แจ้งว่าประมวลผลคำสั่งเสร็จแล้ว
-
-    Body:
-        {
-            "queue_id": "123456_1234567890_12345",
-            "success": true,
-            "error": "optional error message"
-        }
-    """
-    try:
-        account = str(account).strip()
-        data = request.get_json(silent=True) or {}
-
-        queue_id = data.get('queue_id')
-        if not queue_id:
-            return jsonify({
-                'success': False,
-                'error': 'queue_id required'
-            }), 400
-
-        # Acknowledge คำสั่ง
-        success = command_queue.acknowledge_command(account, queue_id)
-
-        if success:
-            logger.info(f"[COMMAND_API] ✅ Command acknowledged: {queue_id} by {account}")
-
-            # บันทึกประวัติ (ถ้า EA ส่ง error มา)
-            if not data.get('success', True):
-                error_msg = data.get('error', 'Unknown error')
-                logger.warning(f"[COMMAND_API] ⚠️ Command {queue_id} failed on EA side: {error_msg}")
-
-            return jsonify({
-                'success': True,
-                'message': 'Command acknowledged'
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': 'Command not found or already acknowledged'
-            }), 404
-
-    except Exception as e:
-        logger.error(f"[COMMAND_API] Error acknowledging command: {e}", exc_info=True)
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@app.get('/api/commands/<account>/status')
-@session_login_required
-def get_command_queue_status(account: str):
-    """
-    API สำหรับดูสถานะ queue ของบัญชี (สำหรับ admin)
-    """
-    try:
-        account = str(account).strip()
-
-        pending_count = command_queue.get_queue_size(account)
-        pending_commands = command_queue.get_pending_commands(account, limit=100)
-
-        return jsonify({
-            'success': True,
-            'account': account,
-            'pending_count': pending_count,
-            'commands': pending_commands
-        })
-
-    except Exception as e:
-        logger.error(f"[COMMAND_API] Error getting status for {account}: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@app.post('/api/commands/<account>/clear')
-@session_login_required
-def clear_command_queue(account: str):
-    """
-    API สำหรับล้าง queue ของบัญชี (สำหรับ admin)
-    """
-    try:
-        account = str(account).strip()
-
-        cleared = command_queue.clear_queue(account)
-
-        logger.info(f"[COMMAND_API] 🗑️ Cleared {cleared} command(s) for {account}")
-
-        return jsonify({
-            'success': True,
-            'message': f'Cleared {cleared} commands',
-            'count': cleared
-        })
-
-    except Exception as e:
-        logger.error(f"[COMMAND_API] Error clearing queue for {account}: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@app.get('/api/commands/status/all')
-@session_login_required
-def get_all_queues_status():
-    """
-    API สำหรับดูสถานะ queue ทั้งหมด (สำหรับ admin)
-    """
-    try:
-        status = command_queue.get_all_queues_status()
-
-        return jsonify({
-            'success': True,
-            'status': status
-        })
-
-    except Exception as e:
-        logger.error(f"[COMMAND_API] Error getting all queues status: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-# =================== END COMMAND QUEUE API ===================
-
-
-
-
-# ============= EA Heartbeat API =============
-
-@app.post('/api/ea/heartbeat')
-@limiter.limit("60 per minute")
-def ea_heartbeat():
-    """
-    EA ส่ง heartbeat มาทุก 30 วินาที (ไม่บังคับ token)
-    Body: {
-        "account": "520310937",
-        "broker": "FTMO",
-        "symbol": "XAUUSD"
-    }
-    """
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No data received'}), 400
-
-        # Token เป็น optional - ถ้าส่งมาก็เช็ค ไม่ส่งมาก็ไม่เช็ค
-        # (เพื่อให้ EA ใช้งานได้โดยไม่ต้องใส่ token)
-
-        account = str(data.get('account', '')).strip()
-        broker = str(data.get('broker', '')).strip()
-        symbol = str(data.get('symbol', '')).strip()
-
-        if not account:
-            return jsonify({'error': 'Account number required'}), 400
-
-        if not session_manager.account_exists(account):
-            logger.warning(f"[EA_HEARTBEAT] Account {account} not found in system")
-            return jsonify({
-                'error': 'Account not registered',
-                'message': 'Please add this account in Account Management first'
-            }), 404
-
-        # เช็คสถานะปัจจุบัน
-        accounts = session_manager.get_all_accounts()
-        current_account = next((a for a in accounts if a['account'] == account), None)
-
-        if not current_account:
-            return jsonify({'error': 'Account not found'}), 404
-
-        # ⚠️ ถ้ายังไม่ได้รับ Symbol → ไม่ activate, แค่อัพเดท heartbeat
-        # ต้องรอ Symbol data จาก /api/ea/symbol endpoint เท่านั้น
-        if current_account['status'] == 'Wait for Activate':
-            # อัพเดท heartbeat แต่ยังคงสถานะ Wait for Activate
-            session_manager.update_account_heartbeat(account)
-            logger.info(f"[EA_HEARTBEAT] Account {account} heartbeat received but waiting for Symbol data to activate")
-
-            return jsonify({
-                'success': True,
-                'message': 'Heartbeat received - waiting for Symbol data to activate',
-                'status': 'Wait for Activate',
-                'activated': False
-            })
-
-        # ✅ ถ้าเคย activate แล้วและตอนนี้ Offline → กลับมา Online
-        # ⚠️ แต่ถ้าเป็น PAUSE จะไม่เปลี่ยนสถานะ (ต้อง resume จาก UI เท่านั้น)
-        if current_account['status'] == 'Offline':
-            session_manager.set_account_online(account, broker)
-            add_system_log('success', f'🟢 [EA] Account {account} back online')
-            logger.info(f"[EA_HEARTBEAT] ✅ Account {account} back online")
-        elif current_account['status'] == 'PAUSE':
-            # Account is paused - only update heartbeat timestamp, keep PAUSE status
-            session_manager.update_account_heartbeat(account)
-            logger.info(f"[EA_HEARTBEAT] Account {account} is PAUSED - heartbeat received but status unchanged")
-            return jsonify({
-                'success': True,
-                'message': 'Heartbeat received (account paused)',
-                'status': 'PAUSE'
-            })
-
-        # อัพเดท heartbeat
-        session_manager.update_account_heartbeat(account)
-
-        return jsonify({
-            'success': True,
-            'message': 'Heartbeat received',
-            'status': current_account['status'] if current_account['status'] != 'Offline' else 'Online'
-        })
-
-    except Exception as e:
-        logger.error(f"[EA_HEARTBEAT_ERROR] {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.get('/api/ea/status/<account>')
-def check_ea_status(account):
-    """เช็คสถานะของบัญชี"""
-    try:
-        accounts = session_manager.get_all_accounts()
-        acc = next((a for a in accounts if a['account'] == account), None)
-
-        if not acc:
-            return jsonify({'error': 'Account not found'}), 404
-
-        return jsonify({
-            'account': acc['account'],
-            'status': acc['status'],
-            'broker': acc['broker'],
-            'last_seen': acc['last_seen']
-        })
-
-    except Exception as e:
-        logger.error(f"[CHECK_STATUS_ERROR] {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-
-# =================== main ===================
-
-# =================== Secret Key Management ===================
-# =================== Global Secret Key Management ===================
-@app.get('/settings/secret')
-@session_login_required
-def get_global_secret():
-    """
-    ดึง Global Secret Key (สำหรับแสดงใน UI)
-    """
-    try:
-        secret = session_manager.get_global_secret()
-
-        return jsonify({
-            'secret': secret,
-            'enabled': bool(secret)
-        })
-
-    except Exception as e:
-        logger.error(f"[GET_GLOBAL_SECRET_ERROR] {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.post('/settings/secret')
-@session_login_required
-def update_global_secret():
-    """
-    อัพเดท Global Secret Key
-
-    Body: {"secret": "your_secret_key"} หรือ {"secret": ""} เพื่อลบ
-    """
-    try:
-        data = request.get_json() or {}
-        secret = data.get('secret', '').strip()
-
-        if session_manager.update_global_secret(secret):
-            action = 'updated' if secret else 'removed'
-            add_system_log('success', f'🔐 Global secret key {action}')
-            return jsonify({
-                'success': True,
-                'message': f'Secret key {action} successfully'
-            })
-        else:
-            return jsonify({'error': 'Failed to update secret key'}), 500
-
-    except Exception as e:
-        logger.error(f"[UPDATE_GLOBAL_SECRET_ERROR] {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-# =================== Symbol Mapping Management ===================
-@app.post('/accounts/<account>/symbols')
-@session_login_required
-def update_symbol_mappings(account):
-    """
-    อัพเดท Symbol Mappings สำหรับ account
-
-    Body options:
-    1. Bulk update: {"mappings": [{"from": "XAUUSD", "to": "GOLD"}, ...]}
-    2. Add single: {"from_symbol": "XAUUSD", "to_symbol": "GOLD"}
-    """
-    try:
-        data = request.get_json() or {}
-
-        if not session_manager.account_exists(account):
-            return jsonify({'error': 'Account not found'}), 404
-
-        # Check if this is a single mapping add request
-        if 'from_symbol' in data and 'to_symbol' in data:
-            from_symbol = data.get('from_symbol', '').strip()
-            to_symbol = data.get('to_symbol', '').strip()
-
-            if not from_symbol or not to_symbol:
-                return jsonify({'error': 'Both symbols are required'}), 400
-
-            # Get current mappings
-            current_mappings = session_manager.get_symbol_mappings(account)
-
-            # Check if mapping already exists
-            for mapping in current_mappings:
-                if mapping.get('from') == from_symbol:
-                    return jsonify({'error': 'Mapping already exists'}), 400
-
-            # Add new mapping
-            new_mapping = {'from': from_symbol, 'to': to_symbol}
-            current_mappings.append(new_mapping)
-
-            # Save updated mappings
-            if session_manager.update_symbol_mappings(account, current_mappings):
-                logger.info(f"[SYMBOL_MAPPING] Added {from_symbol} → {to_symbol} for account {account}")
-                add_system_log('success', f'✅ Symbol mapping added: {from_symbol} → {to_symbol} (account {account})')
-
-                return jsonify({
-                    'success': True,
-                    'message': f'Added mapping: {from_symbol} → {to_symbol}',
-                    'mapping': new_mapping
-                })
-            else:
-                return jsonify({'error': 'Failed to add symbol mapping'}), 500
-
-        # Otherwise, handle bulk update
-        mappings = data.get('mappings', [])
-
-        # Validate mappings format
-        if not isinstance(mappings, list):
-            return jsonify({'error': 'Mappings must be an array'}), 400
-
-        for mapping in mappings:
-            if not isinstance(mapping, dict) or 'from' not in mapping or 'to' not in mapping:
-                return jsonify({'error': 'Invalid mapping format'}), 400
-
-        if session_manager.update_symbol_mappings(account, mappings):
-            add_system_log('success', f'🔄 Symbol mappings updated for account {account} ({len(mappings)} mappings)')
-            return jsonify({
-                'success': True,
-                'message': 'Symbol mappings updated successfully',
-                'count': len(mappings)
-            })
-        else:
-            return jsonify({'error': 'Failed to update symbol mappings'}), 500
-
-    except Exception as e:
-        logger.error(f"[UPDATE_MAPPINGS_ERROR] {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.get('/accounts/<account>/symbols')
-@session_login_required
-def get_symbol_mappings(account):
-    """
-    ดึง Symbol Mappings ของ account
-    """
-    try:
-        if not session_manager.account_exists(account):
-            return jsonify({'error': 'Account not found'}), 404
-
-        mappings = session_manager.get_symbol_mappings(account)
-
-        return jsonify({
-            'account': account,
-            'mappings': mappings,
-            'count': len(mappings)
-        })
-
-    except Exception as e:
-        logger.error(f"[GET_MAPPINGS_ERROR] {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.delete('/accounts/<account>/symbols/<from_symbol>')
-@session_login_required
-def delete_symbol_mapping(account, from_symbol):
-    """ลบ Symbol Mapping แบบ Real-time"""
-    try:
-        if not session_manager.account_exists(account):
-            return jsonify({'error': 'Account not found'}), 404
-
-        # โหลดข้อมูล Symbol Mappings ปัจจุบัน
-        mappings = session_manager.get_symbol_mappings(account)
-
-        # ลบ mapping ที่ตรงกับ from_symbol
-        original_count = len(mappings)
-        mappings = [m for m in mappings if m.get('from') != from_symbol]
-
-        if len(mappings) == original_count:
-            return jsonify({'error': 'Mapping not found'}), 404
-
-        # บันทึกกลับเข้า database
-        if session_manager.update_symbol_mappings(account, mappings):
-            logger.info(f"[SYMBOL_MAPPING] Deleted {from_symbol} for account {account}")
-            add_system_log('success', f'🗑️ Symbol mapping deleted: {from_symbol} (account {account})')
-
-            return jsonify({
-                'success': True,
-                'message': 'Mapping deleted successfully',
-                'remaining_count': len(mappings)
-            })
-        else:
-            return jsonify({'error': 'Failed to delete mapping'}), 500
-
-    except Exception as e:
-        logger.error(f"[SYMBOL_MAPPING] Delete error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.get('/accounts/symbols/overview')
-@session_login_required
-def get_all_mappings_overview():
-    """
-    ดึงภาพรวม Symbol Mappings ของทุก Account
-    """
-    try:
-        all_mappings = session_manager.get_all_symbol_mappings()
-
-        return jsonify({
-            'success': True,
-            'data': all_mappings,
-            'total_accounts': len(all_mappings)
-        })
-
-    except Exception as e:
-        logger.error(f"[GET_ALL_MAPPINGS_ERROR] {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-# ============= Background Status Checker =============
-
-def background_status_checker():
-    """
-    เช็คสถานะบัญชีทุก 1 นาที
-    ถ้าไม่มี heartbeat มานานเกิน 5 นาที ให้เปลี่ยนเป็น Offline
-    """
-    while True:
-        try:
-            session_manager.check_account_online_status()
-            time.sleep(60)  # เช็คทุก 1 นาที
-        except Exception as e:
-            logger.error(f"[BACKGROUND_CHECKER_ERROR] {e}")
-            time.sleep(60)
-
-
-if __name__ == '__main__':
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s [%(levelname)s] %(message)s'
-    )
-    app.logger.setLevel(logging.INFO)
-    
-    # เริ่ม background thread
-    checker_thread = threading.Thread(target=background_status_checker, daemon=True)
-    checker_thread.start()
-    logger.info("[BACKGROUND] Status checker thread started")
-    
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', '5000')), debug=False)

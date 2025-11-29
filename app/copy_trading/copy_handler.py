@@ -401,7 +401,7 @@ class CopyHandler:
                     mapped_symbol = None
                     
                     if self.broker_manager:
-                        from app.signal_translator import SignalTranslator
+                        from app.services.signals import SignalTranslator
                         # ⭐ ส่ง session_manager เพื่อให้เช็ค per-account symbol mapping ที่ User ตั้งไว้
                         translator = SignalTranslator(
                             self.broker_manager,
