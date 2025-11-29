@@ -527,6 +527,27 @@ def accounts_stats():
     return jsonify({'ok': True, 'total': total, 'online': online, 'offline': offline})
 
 
+@app.route('/webhook-url', methods=['GET'])
+@limiter.limit("100 per hour")
+def get_webhook_url():
+    """Get webhook URL for display in UI"""
+    try:
+        # Use EXTERNAL_BASE_URL from .env, not hardcoded localhost
+        webhook_url = f"{EXTERNAL_BASE_URL}/webhook/{WEBHOOK_TOKEN}"
+
+        logger.info(f'[WEBHOOK_URL] Returning URL: {webhook_url}')
+
+        return jsonify({
+            'url': webhook_url,
+            'base_url': EXTERNAL_BASE_URL,
+            'token': WEBHOOK_TOKEN[:8] + '...',  # Show first 8 chars only
+            'success': True
+        })
+    except Exception as e:
+        logger.error(f'[WEBHOOK_URL_ERROR] {e}')
+        return jsonify({'error': str(e)}), 500
+
+
 # =================== accounts REST ===================
 @app.get('/accounts')
 @limiter.exempt
@@ -817,9 +838,9 @@ def delete_account(account):
 @app.get('/api/pairs')
 @session_login_required
 def list_pairs():
-    """à¸”à¸¶à¸‡à¸£à¸²à¸¢à¸à¸²à¸£ Copy Pairs à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸” (à¹ƒà¸Šà¹‰à¸•à¸­à¸™à¸£à¸µà¹€à¸Ÿà¸£à¸Šà¸«à¸™à¹‰à¸²)"""
+    """à¸”à¸¶à¸‡à¸£à¸²à¸¢à¸à¸²à¸£ Copy Pairs à¸—à¸±à¹‰à¸«à¸¡à¸” (à¹ƒà¸Šà¹‰à¸•à¸­à¸™à¸£à¸µà¹€à¸Ÿà¸£à¸Šà¸«à¸™à¹‰à¸²)"""
     try:
-        # à¸£à¸­à¸‡à¸£à¸±à¸šà¸—à¸±à¹‰à¸‡ list_pairs() à¹à¸¥à¸° get_all_pairs()
+        # à¸£à¸­à¸‡à¸£à¸±à¸šà¸—à¸±à¹‰à¸«à¸¡à¸” list_pairs() à¹à¸¥à¸° get_all_pairs()
         if hasattr(copy_manager, 'list_pairs'):
             pairs = copy_manager.list_pairs()
         else:
@@ -1432,7 +1453,7 @@ def copy_trade_endpoint():
 
     except Exception as e:
         logger.error(f"[COPY_TRADE_ERROR] {e}", exc_info=True)
-        add_system_log('error', f'❌ [500] Copy trade error: {str(e)[:80]}')
+        add_system_log('error', f'❌ [500] Copy trade error: {str(e)}')
         return jsonify({'error': str(e)}), 500
 @app.get('/api/copy/history')
 @session_login_required
@@ -1597,7 +1618,7 @@ def save_settings(settings_data):
 @app.get('/api/settings')
 @session_login_required
 def get_all_settings():
-    """à¸”à¸¶à¸‡ settings à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”"""
+    """à¸”à¸¶à¸‡ settings à¸—à¸±à¹‰à¸«à¸¡à¸”"""
     try:
         settings = load_settings()
         return jsonify(settings), 200
