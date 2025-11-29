@@ -66,7 +66,7 @@ WEBHOOK_TOKEN = os.getenv('WEBHOOK_TOKEN', 'default-token')
 EXTERNAL_BASE_URL = os.getenv('EXTERNAL_BASE_URL', 'http://localhost:5000')
 
 # ==== flask app ====
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates', static_folder='static')
 app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-here')
 SESSION_COOKIE_SECURE = False
 app.config.update(
@@ -480,7 +480,10 @@ def not_found(_):
 
 @app.route('/')
 def index():
-    return send_from_directory('static', 'index.html')
+    from flask import render_template
+    return render_template('index.html',
+                         webhook_token=WEBHOOK_TOKEN,
+                         external_base_url=EXTERNAL_BASE_URL)
 
 
 @app.route('/static/<path:filename>')

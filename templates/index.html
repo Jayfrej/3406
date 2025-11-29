@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}MT5 Trading Bot - Multi Account Manager{% endblock %}
+
+{% block content %}
+    <!-- All SPA Pages (Initially Hidden, JavaScript Manages Visibility) -->
+
+    <!-- Account Management Page -->
+    {% include 'pages/accounts.html' %}
+
+    <!-- Webhook Page -->
+    {% include 'pages/webhook.html' %}
+
+    <!-- Copy Trading Page -->
+    {% include 'pages/copy_trading.html' %}
+
+    <!-- System Information Page -->
+    {% include 'pages/system.html' %}
+
+    <!-- Settings Page -->
+    {% include 'pages/settings.html' %}
+{% endblock %}
+

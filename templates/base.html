@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html data-theme="dark" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>{% block title %}MT5 Trading Bot - Multi Account Manager{% endblock %}</title>
+
+    <!-- Modular CSS Files (Load in Order) -->
+    <link href="/static/css/base.css" rel="stylesheet"/>
+    <link href="/static/css/layout.css" rel="stylesheet"/>
+    <link href="/static/css/components.css" rel="stylesheet"/>
+    <link href="/static/css/toast.css" rel="stylesheet"/>
+    <link href="/static/css/modals.css" rel="stylesheet"/>
+    <link href="/static/css/pages/accounts.css" rel="stylesheet"/>
+    <link href="/static/css/pages/webhook.css" rel="stylesheet"/>
+    <link href="/static/css/pages/copy-trading.css" rel="stylesheet"/>
+    <link href="/static/css/pages/system.css" rel="stylesheet"/>
+    <link href="/static/css/pages/settings.css" rel="stylesheet"/>
+    <link href="/static/css/responsive.css" rel="stylesheet"/>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet"/>
+
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Sidebar Navigation -->
+    {% include 'partials/sidebar.html' %}
+
+    <!-- Mobile Sidebar Toggle -->
+    {% include 'partials/sidebar-toggle.html' %}
+
+    <!-- Main Content Area -->
+    <div class="main-content">
+        <div class="container">
+            <!-- Header -->
+            {% include 'partials/header.html' %}
+
+            <!-- Page Content -->
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+
+    <!-- Global Components -->
+    {% include 'partials/components/modals.html' %}
+    {% include 'partials/components/toast.html' %}
+    {% include 'partials/components/loading.html' %}
+
+    <!-- Core JavaScript (Load in Order) -->
+    <!-- Core Utilities -->
+    <script src="/static/js/core/utils.js"></script>
+    <script src="/static/js/core/api.js"></script>
+    <script src="/static/js/core/auth.js"></script>
+    <script src="/static/js/core/theme.js"></script>
+    <script src="/static/js/core/router.js"></script>
+
+    <!-- UI Components -->
+    <script src="/static/js/components/toast.js"></script>
+    <script src="/static/js/components/modal.js"></script>
+    <script src="/static/js/components/loading.js"></script>
+
+    <!-- Feature Modules -->
+    <script src="/static/js/modules/webhooks/webhooks.js"></script>
+    <script src="/static/js/modules/webhooks/webhook-ui.js"></script>
+    <script src="/static/js/modules/accounts/accounts.js"></script>
+    <script src="/static/js/modules/accounts/account-ui.js"></script>
+    <script src="/static/js/modules/copy-trading/copy-trading.js"></script>
+    <script src="/static/js/modules/copy-trading/copy-trading-ui.js"></script>
+    <script src="/static/js/modules/system/system.js"></script>
+    <script src="/static/js/modules/system/system-ui.js"></script>
+    <script src="/static/js/modules/settings/settings.js"></script>
+    <script src="/static/js/modules/settings/settings-ui.js"></script>
+
+    <!-- Compatibility Bridge & Coordinator -->
+    <script src="/static/js/compat-bridge.js"></script>
+    <script src="/static/js/main.js"></script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
+

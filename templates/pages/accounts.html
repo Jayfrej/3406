@@ -1,0 +1,146 @@
+<!-- Account Management Page -->
+<!-- Page: Account Management -->
+<div class="page-content active" id="page-accounts">
+<!-- Stats Grid (Full Width) -->
+<div class="stats-grid stats-grid-4">
+<div class="stat-card">
+<div class="stat-icon"><i class="fas fa-users"></i></div>
+<div class="stat-info">
+<div class="stat-number" id="totalAccountsAM">0</div>
+<div class="stat-label">Total Accounts</div>
+</div>
+</div>
+<div class="stat-card">
+<div class="stat-icon online"></div>
+<div class="stat-info">
+<div class="stat-number" id="onlineAccountsAM">0</div>
+<div class="stat-label">Online</div>
+</div>
+</div>
+<div class="stat-card">
+<div class="stat-icon offline"></div>
+<div class="stat-info">
+<div class="stat-number" id="offlineAccountsAM">0</div>
+<div class="stat-label">Offline</div>
+</div>
+</div>
+<div class="stat-card">
+<div class="stat-icon"><i class="fas fa-clock"></i></div>
+<div class="stat-info">
+<div class="stat-number" id="lastUpdateAM">--:--:--</div>
+<div class="stat-label">Last Update</div>
+</div>
+</div>
+</div>
+
+<!-- Two Column Layout -->
+<div class="two-column-layout">
+<!-- Left Column: Add MT5 Account -->
+<div class="card">
+<div class="card-header">
+<h3><i class="fas fa-plus"></i> Add MT5 Account</h3>
+</div>
+<div class="card-body">
+<form class="add-form-vertical" id="addAccountFormAM">
+<div class="form-group">
+<label for="accountNumberAM">Account Number</label>
+<input class="form-input" id="accountNumberAM" name="account" placeholder="e.g., 1123456" required=""/>
+</div>
+<div class="form-group">
+<label for="nicknameAM">Nickname</label>
+<input class="form-input" id="nicknameAM" name="nickname" placeholder="e.g. Main Account"/>
+</div>
+<div class="account-button-group">
+<button class="btn btn-success" type="submit">
+<i class="fas fa-plus"></i> Add Account
+</button>
+</div>
+</form>
+</div>
+</div>
+
+<!-- Right Column: Modify -->
+<div class="card">
+<div class="card-header">
+<h3><i class="fas fa-cog"></i> Modify</h3>
+</div>
+<div class="card-body modify-sections">
+
+<!-- Section 1: Signal Authentication -->
+<div class="modify-section">
+<div class="modify-section-header">
+<i class="fas fa-shield-alt"></i>
+<div class="modify-section-title">
+<span>Signal Authentication</span>
+<small>Global secret key for all accounts</small>
+</div>
+</div>
+
+<div class="form-group">
+<label for="globalSecretInput">
+<i class="fas fa-key"></i> Global Secret Key
+</label>
+<div class="input-group">
+<input class="form-input" id="globalSecretInput"
+placeholder="Enter secret key or leave empty to disable" />
+<button class="btn btn-secondary btn-icon-only"
+id="generateGlobalSecretBtn"
+type="button"
+title="Generate">
+<i class="fas fa-random"></i>
+</button>
+</div>
+<small class="form-hint">
+Leave empty to disable authentication (allow all webhooks)
+</small>
+</div>
+
+<div class="button-group-horizontal">
+<button class="btn btn-success" type="button" id="saveGlobalSecretBtn">
+<i class="fas fa-save"></i> Save Secret Key
+</button>
+<button class="btn btn-danger" type="button" id="clearGlobalSecretBtn">
+<i class="fas fa-trash"></i> Clear Secret
+</button>
+</div>
+</div>
+
+</div>
+</div>
+</div>
+
+<!-- Full Width: Account Management Table -->
+<div class="card">
+<div class="card-header">
+<h3><i class="fas fa-table"></i> Account Management</h3>
+<div class="table-actions">
+<input class="search-input" id="searchInputAM" placeholder="Search accounts..."/>
+</div>
+</div>
+<div class="card-body">
+<div class="table-container">
+<table class="accounts-table" id="accountsTableAM">
+<thead>
+<tr>
+<th>Status</th>
+<th>Account</th>
+<th>Nickname</th>
+<th>Broker</th>
+<th>Last Seen</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="accountsTableBodyAM">
+<tr class="no-data"><td colspan="6">
+<div class="no-data-message">
+<i class="fas fa-inbox"></i>
+<p>No accounts found. Add your first account above.</p>
+</div>
+</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+
+</div>

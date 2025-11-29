@@ -1,0 +1,119 @@
+<!-- Webhook Page -->
+<div class="page-content" id="page-webhook"><!-- Two Column -->
+<div class="two-column-layout">
+<div class="card">
+<div class="card-header"><h3><i class="fas fa-plus"></i> Add MT5 Account</h3></div>
+<div class="card-body">
+<form class="add-form-vertical" id="addAccountForm">
+<div class="form-group">
+<label for="accountNumber">Account Number</label>
+<input class="form-input" id="accountNumber" name="account" placeholder="e.g., 1123456" required=""/>
+</div>
+<div class="form-group">
+<label for="nickname">Nickname</label>
+<input class="form-input" id="nickname" name="nickname" placeholder="e.g. Main Account"/>
+</div>
+<div class="account-button-group">
+<button class="btn btn-success" onclick="ui.addAccountFromServer()" type="button">
+<i class="fas fa-server"></i> Add from Server
+                  </button>
+<button class="btn btn-success" type="submit">
+<i class="fas fa-plus"></i> Add Account
+                  </button>
+</div>
+</form>
+</div>
+</div>
+<div class="card">
+<div class="card-header"><h3><i class="fas fa-link"></i> Webhook Configuration</h3></div>
+<div class="card-body webhook-config">
+<div class="form-group">
+<label for="webhookUrl">Webhook URL</label>
+<div class="url-input-group">
+<input class="form-input" id="webhookUrl" placeholder="https://your-domain.com/webhook/your-secure-token" readonly=""/>
+<button class="btn-copy" onclick="ui.copyWebhookUrl()" title="Copy to clipboard"><i class="fas fa-copy"></i></button>
+</div>
+</div>
+<div class="webhook-info">
+<div class="info-row"><strong>Usage:</strong> Use this URL in TradingView alerts or other webhook sources</div>
+<div class="info-row"><strong>Method:</strong> POST</div>
+<div class="info-row"><strong>Content-Type:</strong> application/json</div>
+</div>
+<div class="example-section">
+<div class="example-header">
+<span>Example JSON Payload:</span>
+<div class="example-nav">
+<button class="example-nav-btn" onclick="showExample(0)">Market</button>
+<button class="example-nav-btn" onclick="showExample(1)">Market 2</button>
+<button class="example-nav-btn" onclick="showExample(2)">Limit</button>
+<button class="example-nav-btn" onclick="showExample(3)">Limit 2</button>
+<button class="example-nav-btn" onclick="showExample(4)">Close</button>
+<button class="example-nav-btn" onclick="showExample(5)">Close 2</button>
+</div>
+</div>
+<div class="example-content">
+<div class="example-title" id="exampleTitle">Market Order:</div>
+<div class="json-container">
+<button class="json-copy-btn" onclick="copyExample()" title="Copy JSON"><i class="fas fa-copy"></i></button>
+<pre class="json-code" id="jsonCode"></pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Webhook Management Table -->
+<div class="card">
+<div class="card-header">
+<h3><i class="fas fa-table"></i> Webhook Management</h3>
+<div class="table-actions"><input class="search-input" id="searchInput" placeholder="Search accounts..."/></div>
+</div>
+<div class="card-body">
+<div class="table-container">
+<table class="accounts-table" id="accountsTable">
+<thead>
+<tr><th>Status</th><th>Account</th><th>Nickname</th><th>PID</th><th>Created</th><th>Actions</th></tr>
+</thead>
+<tbody id="accountsTableBody">
+<tr class="no-data"><td colspan="6">
+<div class="no-data-message"><i class="fas fa-inbox"></i><p>No webhook accounts. Use "Add from Server" to add.</p></div>
+</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Trading History -->
+<div class="card">
+<div class="card-header">
+<h3><i class="fas fa-history"></i> Trading History</h3>
+<div class="table-actions">
+<select class="form-input" id="historyFilter" style="width:auto;padding:8px 12px;">
+<option value="all">All Trades</option>
+<option value="success">Success Only</option>
+<option value="error">Errors Only</option>
+</select>
+<select class="form-input" id="accountFilter" style="width:auto;padding:8px 12px;margin-left:8px;">
+<option value="all">All Accounts</option>
+</select>
+<button class="btn btn-secondary btn-sm" onclick="ui.clearHistory()" title="Clear History">
+<i class="fas fa-trash"></i> Clear
+              </button>
+</div>
+</div>
+<div class="card-body">
+<div class="table-container history-scroll">
+<table class="accounts-table">
+<thead>
+<tr><th>Status</th><th>Account</th><th>Action</th><th>Symbol</th><th>Price</th><th>TP</th><th>SL</th><th>Volume</th><th>Message</th><th>Time</th></tr>
+</thead>
+<tbody id="historyTableBody">
+<tr class="no-data"><td colspan="10">
+<div class="no-data-message"><i class="fas fa-clock-rotate-left"></i><p>No trading history yet.</p></div>
+</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
