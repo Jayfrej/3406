@@ -44,8 +44,21 @@ from app.copy_trading import copy_trading_bp
 from app.services.broker import BrokerDataManager
 from app.services.signals import SignalTranslator
 from app.services.balance import balance_manager
-# ==== env ====
-load_dotenv()
+
+# ==== Load Environment Variables ====
+# Use absolute path to ensure .env is loaded from project root
+BASE_DIR = Path(__file__).resolve().parent
+ENV_FILE = BASE_DIR / '.env'
+
+# Load .env file with explicit path
+if ENV_FILE.exists():
+    load_dotenv(dotenv_path=ENV_FILE)
+    print(f"[OK] Loaded .env from: {ENV_FILE}")
+else:
+    print(f"[WARNING] .env file not found at {ENV_FILE}")
+    print(f"[WARNING] Using default values. Please copy .env.template to .env and configure it.")
+
+# Load environment variables with defaults
 BASIC_USER = os.getenv('BASIC_USER', 'admin')
 BASIC_PASS = os.getenv('BASIC_PASS', 'pass')
 WEBHOOK_TOKEN = os.getenv('WEBHOOK_TOKEN', 'default-token')
@@ -1944,15 +1957,24 @@ add_system_log('info', f'🔗 Webhook endpoint: /webhook/{WEBHOOK_TOKEN}')
 if __name__ == '__main__':
     try:
         logger.info("="*80)
-        logger.info("🚀 MT5 TRADING BOT SERVER")
+        logger.info("[SERVER] MT5 TRADING BOT SERVER")
         logger.info("="*80)
-        logger.info(f"📡 Server Address: http://0.0.0.0:5000")
-        logger.info(f"🌐 External URL: {EXTERNAL_BASE_URL}")
-        logger.info(f"🔗 Webhook: {EXTERNAL_BASE_URL}/webhook/{WEBHOOK_TOKEN}")
-        logger.info(f"📊 Health Check: {EXTERNAL_BASE_URL}/health")
+        logger.info(f"[NETWORK] Server Address: http://0.0.0.0:5000")
+        logger.info(f"[NETWORK] External URL: {EXTERNAL_BASE_URL}")
+        logger.info(f"[WEBHOOK] Webhook: {EXTERNAL_BASE_URL}/webhook/{WEBHOOK_TOKEN[:8]}...{WEBHOOK_TOKEN[-4:]}")
+        logger.info(f"[HEALTH] Health Check: {EXTERNAL_BASE_URL}/health")
         logger.info("="*80)
-        logger.info("✅ Server is ready to accept connections")
-        logger.info("⏸️  Press Ctrl+C to stop the server")
+        logger.info("[AUTH] AUTHENTICATION CONFIGURATION:")
+        logger.info(f"[AUTH]    Username: {BASIC_USER}")
+        password_status = f"SET ({len(BASIC_PASS)} chars)" if BASIC_PASS and BASIC_PASS != 'pass' else "USING DEFAULT - CHANGE THIS!"
+        logger.info(f"[AUTH]    Password: {password_status}")
+        token_status = f"SET ({len(WEBHOOK_TOKEN)} chars)" if WEBHOOK_TOKEN != 'default-token' else "USING DEFAULT - CHANGE THIS!"
+        logger.info(f"[AUTH]    Webhook Token: {token_status}")
+        env_status = "LOADED" if ENV_FILE.exists() else "NOT FOUND"
+        logger.info(f"[AUTH]    .env file: {env_status}")
+        logger.info("="*80)
+        logger.info("[READY] Server is ready to accept connections")
+        logger.info("[INFO] Press Ctrl+C to stop the server")
         logger.info("="*80)
 
         # Run Flask server (blocking call)
