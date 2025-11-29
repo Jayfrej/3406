@@ -1,5 +1,3 @@
-import smtplib
-import ssl
 # server.py â€” full fixed version
 
 import os
