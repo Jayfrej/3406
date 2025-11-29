@@ -76,17 +76,18 @@ await WebhookUI.removeAccount('12345');
 |--------|--------|-------|-------|----------|
 | **Webhooks** | ✅ Done | 2 | 522 | 100% |
 | **Accounts** | ✅ Done | 2 | 723 | 100% |
-| **Copy Trading** | 🔄 Next | 3 | ~1500 | 0% |
-| **System** | ⏳ Pending | 2 | ~400 | 0% |
+| **Copy Trading** | ✅ Done | 2 | 1,022 | 100% |
+| **System** | 🔄 Next | 2 | ~400 | 0% |
 | **Settings** | ⏳ Pending | 1 | ~600 | 0% |
 
 **Total Extracted So Far:**
 - Core modules: 969 lines (Phase 2.2)
 - Webhooks: 522 lines (Phase 2.3)
 - Accounts: 723 lines (Phase 2.3)
-- **Total: 2,214 lines (37.9% of 5,840)**
+- Copy Trading: 1,022 lines (Phase 2.3)
+- **Total: 3,236 lines (55.4% of 5,840)**
 
-**Remaining:** ~3,626 lines
+**Remaining:** ~2,604 lines
 
 ---
 
@@ -107,6 +108,10 @@ Webhooks Module (Phase 2.3) ✅
 Accounts Module (Phase 2.3) ✅
   ├── accounts.js (uses API)
   └── account-ui.js (uses AccountManager, Utils)
+      ↓
+Copy Trading Module (Phase 2.3) ✅
+  ├── copy-trading.js (uses API, Router)
+  └── copy-trading-ui.js (uses CopyTradingManager, Utils, WebhookManager)
 ```
 
 ---
@@ -188,6 +193,104 @@ AccountUI.updateStats();
 await AccountUI.addAccount('addAccountFormAM');
 await AccountUI.performAction('12345', 'pause');
 AccountUI.filterTable('search term');
+```
+
+---
+
+### **3. Copy Trading Module** ✅
+
+#### **Files Created:**
+- `js/modules/copy-trading/copy-trading.js` (548 lines)
+- `js/modules/copy-trading/copy-trading-ui.js` (474 lines)
+
+#### **copy-trading.js - Business Logic**
+**Class: CopyTradingManager**
+
+**Properties:**
+- `copyPairs` - All copy trading pairs
+- `copyHistory` - Copy trade history
+- `masterAccounts` - Master account list
+- `slaveAccounts` - Slave account list
+- `plans` - Legacy format for UI compatibility
+
+**Methods:**
+- `loadCopyPairs()` - Load all copy pairs from server
+- `loadCopyHistory(limit)` - Load copy history
+- `cleanupDeletedAccounts()` - Remove deleted accounts from lists
+- `loadMasterAccounts()` - Load master accounts
+- `loadSlaveAccounts()` - Load slave accounts
+- `addMasterAccount(account)` - Add master account
+- `addSlaveAccount(account)` - Add slave account
+- `deleteMasterAccount(accountId)` - Delete master account
+- `deleteSlaveAccount(accountId)` - Delete slave account
+- `subscribeCopyEvents()` - Subscribe to real-time events
+- `unsubscribeCopyEvents()` - Unsubscribe from events
+- `addCopyToHistory(item)` - Add copy trade to history
+- `setupCopyHistoryAutoRefresh(interval)` - Setup auto-refresh
+- `stopCopyHistoryAutoRefresh()` - Stop auto-refresh
+- `filterCopyHistory(filters)` - Filter history by status/account
+- `getStats()` - Get copy trading statistics
+
+**Features:**
+- ✅ Uses window.API for HTTP requests
+- ✅ Real-time event subscription (SSE)
+- ✅ Auto-refresh copy history
+- ✅ Automatic cleanup of deleted accounts
+- ✅ History filtering and management
+- ✅ Statistics tracking
+- ✅ Legacy plans format support
+- ✅ Singleton instance: `window.CopyTradingManager`
+
+**Usage:**
+```javascript
+await CopyTradingManager.loadCopyPairs();
+await CopyTradingManager.loadMasterAccounts();
+await CopyTradingManager.addMasterAccount({ accountNumber: '12345', nickname: 'Test' });
+CopyTradingManager.subscribeCopyEvents();
+const stats = CopyTradingManager.getStats();
+```
+
+---
+
+#### **copy-trading-ui.js - UI Rendering**
+**Class: CopyTradingUI**
+
+**Methods:**
+- `renderAll()` - Render all UI elements
+- `renderCopyPairs()` - Render copy pairs cards
+- `renderMasterAccounts()` - Render master accounts list
+- `renderSlaveAccounts()` - Render slave accounts list
+- `renderCopyHistory()` - Render copy history table
+- `updatePairCount()` - Update statistics display
+- `addMasterAccount(formId)` - Add master account from form
+- `addSlaveAccount(formId)` - Add slave account from form
+- `removeMasterAccount(accountId)` - Remove master account
+- `removeSlaveAccount(accountId)` - Remove slave account
+- `editPair(pairId)` - Edit copy pair (placeholder)
+- `deletePair(pairId)` - Delete copy pair (placeholder)
+- `copyCopyTradingEndpoint()` - Copy endpoint to clipboard
+- `refresh()` - Refresh all data and UI
+
+**Features:**
+- ✅ Uses CopyTradingManager for data
+- ✅ Copy pairs card layout
+- ✅ Master/Slave account cards
+- ✅ Copy history with filters
+- ✅ Real-time statistics
+- ✅ Confirmation dialogs
+- ✅ Loading indicators
+- ✅ Toast notifications
+- ✅ XSS prevention
+- ✅ Relative time formatting
+- ✅ Singleton instance: `window.CopyTradingUI`
+
+**Usage:**
+```javascript
+CopyTradingUI.renderAll();
+await CopyTradingUI.addMasterAccount('addMasterForm');
+await CopyTradingUI.removeMasterAccount('123');
+await CopyTradingUI.refresh();
+CopyTradingUI.copyCopyTradingEndpoint();
 ```
 
 ---
