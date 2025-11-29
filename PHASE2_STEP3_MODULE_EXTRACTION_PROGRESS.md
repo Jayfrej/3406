@@ -75,17 +75,18 @@ await WebhookUI.removeAccount('12345');
 | Module | Status | Files | Lines | Complete |
 |--------|--------|-------|-------|----------|
 | **Webhooks** | ✅ Done | 2 | 522 | 100% |
-| **Accounts** | 🔄 Next | 2 | ~800 | 0% |
-| **Copy Trading** | ⏳ Pending | 3 | ~1500 | 0% |
+| **Accounts** | ✅ Done | 2 | 723 | 100% |
+| **Copy Trading** | 🔄 Next | 3 | ~1500 | 0% |
 | **System** | ⏳ Pending | 2 | ~400 | 0% |
 | **Settings** | ⏳ Pending | 1 | ~600 | 0% |
 
 **Total Extracted So Far:**
 - Core modules: 969 lines (Phase 2.2)
 - Webhooks: 522 lines (Phase 2.3)
-- **Total: 1,491 lines (25.5% of 5,840)**
+- Accounts: 723 lines (Phase 2.3)
+- **Total: 2,214 lines (37.9% of 5,840)**
 
-**Remaining:** ~4,349 lines
+**Remaining:** ~3,626 lines
 
 ---
 
@@ -102,6 +103,91 @@ Core Modules (Phase 2.2)
 Webhooks Module (Phase 2.3) ✅
   ├── webhooks.js (uses API, Utils)
   └── webhook-ui.js (uses WebhookManager, Utils)
+      ↓
+Accounts Module (Phase 2.3) ✅
+  ├── accounts.js (uses API)
+  └── account-ui.js (uses AccountManager, Utils)
+```
+
+---
+
+### **2. Accounts Module** ✅
+
+#### **Files Created:**
+- `js/modules/accounts/accounts.js` (334 lines)
+- `js/modules/accounts/account-ui.js` (389 lines)
+
+#### **accounts.js - Business Logic**
+**Class: AccountManager**
+
+**Methods:**
+- `loadAccounts()` - Load all accounts from server
+- `addAccount(account, nickname)` - Add new account
+- `deleteAccount(accountNumber)` - Delete account
+- `pauseAccount(accountNumber)` - Pause account
+- `resumeAccount(accountNumber)` - Resume account
+- `restartAccount(accountNumber)` - Restart account (local)
+- `stopAccount(accountNumber)` - Stop account (local)
+- `openAccountTerminal(accountNumber)` - Open terminal (local)
+- `getAccounts()` - Get all accounts
+- `getAccount(accountNumber)` - Get specific account
+- `getStats()` - Get account statistics
+- `filterAccounts(searchTerm)` - Filter accounts by search
+- `hasAccount(accountNumber)` - Check if account exists
+- `getOnlineAccounts()` - Get online accounts
+- `getOfflineAccounts()` - Get offline accounts
+- `getPausedAccounts()` - Get paused accounts
+
+**Features:**
+- ✅ Uses window.API for HTTP requests
+- ✅ Comprehensive account operations
+- ✅ Local status tracking
+- ✅ Error handling with detailed responses
+- ✅ Singleton instance: `window.AccountManager`
+
+**Usage:**
+```javascript
+await AccountManager.loadAccounts();
+await AccountManager.addAccount('12345', 'My Account');
+await AccountManager.pauseAccount('12345');
+await AccountManager.deleteAccount('12345');
+const stats = AccountManager.getStats();
+```
+
+---
+
+#### **account-ui.js - UI Rendering**
+**Class: AccountUI**
+
+**Methods:**
+- `renderAccountsTable(tableBodyId)` - Render accounts table
+- `renderActionButtons(account)` - Render action buttons
+- `updateStats(prefix)` - Update statistics display
+- `addAccount(formId)` - Add account from form
+- `performAction(accountNumber, action)` - Perform account action
+- `showConfirmDialog(action, accountNumber)` - Show confirmation
+- `showSymbolMapping(accountNumber)` - Show symbol mapping modal
+- `filterTable(searchTerm, tableBodyId)` - Filter table
+- `refresh()` - Refresh all displays
+- `formatLastSeen(lastSeenStr)` - Format last seen timestamp
+
+**Features:**
+- ✅ Uses AccountManager for data
+- ✅ Dynamic action buttons based on status
+- ✅ Confirmation dialogs
+- ✅ Loading indicators
+- ✅ Toast notifications
+- ✅ XSS prevention
+- ✅ Refresh coordination with webhooks
+- ✅ Singleton instance: `window.AccountUI`
+
+**Usage:**
+```javascript
+AccountUI.renderAccountsTable();
+AccountUI.updateStats();
+await AccountUI.addAccount('addAccountFormAM');
+await AccountUI.performAction('12345', 'pause');
+AccountUI.filterTable('search term');
 ```
 
 ---
