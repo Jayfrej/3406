@@ -87,9 +87,10 @@ await WebhookUI.removeAccount('12345');
 - Copy Trading: 1,022 lines (Phase 2.3)
 - System: 514 lines (Phase 2.3)
 - Settings: 717 lines (Phase 2.3)
-- **Total: 4,467 lines (76.5% of 5,840)**
+- Components: 408 lines (Phase 2.3)
+- **Total: 4,875 lines (83.5% of 5,840)**
 
-**Remaining:** ~1,373 lines
+**Remaining:** ~965 lines (mostly glue code and legacy functions)
 
 ---
 
