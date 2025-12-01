@@ -49,7 +49,8 @@ def create_app():
     from app.email_handler import EmailHandler
     from app.command_queue import CommandQueue
     from app.broker_data_manager import BrokerDataManager
-    from app.account_balance import AccountBalance
+    from app.account_balance import AccountBalanceManager
+    from app.symbol_mapper import SymbolMapper
     from app.signal_translator import SignalTranslator
     from app.trades import init_trades
 
@@ -58,8 +59,13 @@ def create_app():
     email_handler = EmailHandler()
     command_queue = CommandQueue()
     broker_manager = BrokerDataManager()
-    balance_manager = AccountBalance()
-    signal_translator = SignalTranslator()
+    balance_manager = AccountBalanceManager()
+    symbol_mapper = SymbolMapper()
+    signal_translator = SignalTranslator(
+        broker_data_manager=broker_manager,
+        symbol_mapper=symbol_mapper,
+        session_manager=session_manager
+    )
 
     logger.info("[APP_FACTORY] Core modules initialized")
 
@@ -74,18 +80,22 @@ def create_app():
 
     copy_manager = CopyManager()
     copy_history = CopyHistory()
-    balance_helper = BalanceHelper()
+    balance_helper = BalanceHelper(
+        session_manager=session_manager,
+        balance_manager=balance_manager
+    )
     copy_executor = CopyExecutor(
         session_manager=session_manager,
-        signal_translator=signal_translator,
-        command_queue=command_queue,
-        broker_manager=broker_manager,
-        balance_manager=balance_manager
+        copy_history=copy_history
     )
     copy_handler = CopyHandler(
         copy_manager=copy_manager,
+        symbol_mapper=symbol_mapper,
         copy_executor=copy_executor,
-        copy_history=copy_history
+        session_manager=session_manager,
+        broker_data_manager=broker_manager,
+        balance_manager=balance_manager,
+        email_handler=email_handler
     )
 
     logger.info("[APP_FACTORY] Copy trading modules initialized")
@@ -180,9 +190,6 @@ def create_app():
         lim=limiter
     )
 
-    # Initialize trades blueprint
-    trades_bp = init_trades(session_manager, limiter)
-
     logger.info("[APP_FACTORY] Routes initialized")
 
     # =================== Register Blueprints ===================
@@ -192,9 +199,12 @@ def create_app():
     app.register_blueprint(settings_bp)
     app.register_blueprint(system_bp)
     app.register_blueprint(broker_balance_bp)
-    app.register_blueprint(trades_bp)
 
     logger.info("[APP_FACTORY] Blueprints registered")
+
+    # Initialize trades (requires app context)
+    with app.app_context():
+        init_trades()
 
     # =================== Register Error Handlers ===================
     register_error_handlers(app)
@@ -299,4 +309,5 @@ The MT5 instance has started successfully.
     logger.info("[APP_FACTORY] Application initialization complete")
 
     return app
+
 
