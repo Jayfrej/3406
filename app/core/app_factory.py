@@ -200,6 +200,10 @@ def create_app():
     app.register_blueprint(system_bp)
     app.register_blueprint(broker_balance_bp)
 
+    # Register UI routes last (so API routes take precedence)
+    from app.routes.ui_routes import ui_bp
+    app.register_blueprint(ui_bp)
+
     logger.info("[APP_FACTORY] Blueprints registered")
 
     # Initialize trades (requires app context)
