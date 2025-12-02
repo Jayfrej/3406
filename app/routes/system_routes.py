@@ -172,16 +172,26 @@ def accounts_stats():
 @system_bp.route('/login', methods=['POST'])
 def login_api():
     """Login endpoint for UI authentication"""
-    import os
     from flask import session
+    from dotenv import load_dotenv
+    import os
 
     try:
+        # Load environment variables explicitly
+        load_dotenv(override=True)
+
         data = request.json or {}
         username = data.get("username", "")
         password = data.get("password", "")
 
-        BASIC_USER = os.getenv('BASIC_USER', 'admin')
-        BASIC_PASS = os.getenv('BASIC_PASS', '')
+        BASIC_USER = os.getenv('BASIC_USER')
+        BASIC_PASS = os.getenv('BASIC_PASS')
+
+        # Validate credentials are configured
+        if not BASIC_USER or not BASIC_PASS:
+            logger.error("[LOGIN] Credentials not found in .env file")
+            system_logs_service.add_log('error', '❌ [500] Login failed - Server configuration error (missing BASIC_USER or BASIC_PASS in .env)')
+            return jsonify({"ok": False, "error": "Server configuration error"}), 500
 
         if username == BASIC_USER and password == BASIC_PASS:
             session["auth"] = True
