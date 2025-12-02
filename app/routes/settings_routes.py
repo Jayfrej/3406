@@ -6,7 +6,7 @@ import re
 import logging
 from datetime import datetime
 from flask import Blueprint, request, jsonify
-from app.middleware.auth import session_login_required
+from app.middleware.auth import require_auth
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ def init_settings_routes(ss, sls, eh, esa_fn):
 
 
 @settings_bp.route('/api/settings', methods=['GET'])
-@session_login_required
+@require_auth
 def get_all_settings():
     """ดึง settings ทั้งหมด"""
     try:
@@ -51,7 +51,7 @@ def get_all_settings():
 
 
 @settings_bp.route('/api/settings/rate-limits', methods=['POST'])
-@session_login_required
+@require_auth
 def save_rate_limit_settings():
     """บันทึก Rate Limit Settings"""
     try:
@@ -103,7 +103,7 @@ def save_rate_limit_settings():
 
 
 @settings_bp.route('/api/settings/email', methods=['GET'])
-@session_login_required
+@require_auth
 def get_email_settings():
     """ดึง Email Settings"""
     try:
@@ -122,7 +122,7 @@ def get_email_settings():
 
 
 @settings_bp.route('/api/settings/email', methods=['POST'])
-@session_login_required
+@require_auth
 def save_email_settings():
     """บันทึก Email Settings"""
     try:
@@ -193,7 +193,7 @@ def save_email_settings():
 
 
 @settings_bp.route('/api/settings/email/test', methods=['POST'])
-@session_login_required
+@require_auth
 def test_email_settings():
     """ทดสอบส่ง Email"""
     try:

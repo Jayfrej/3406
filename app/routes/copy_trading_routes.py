@@ -9,7 +9,7 @@ import queue
 from datetime import datetime
 from pathlib import Path
 from flask import Blueprint, request, jsonify, Response, stream_with_context
-from app.middleware.auth import session_login_required
+from app.middleware.auth import require_auth
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ def init_copy_trading_routes(cm, ch, ce, chand, sm, sls, lim):
 # =================== Copy Pairs Management ===================
 
 @copy_trading_bp.route('/api/pairs', methods=['GET'])
-@session_login_required
+@require_auth
 def list_pairs():
     """ดึงรายการ Copy Pairs ทั้งหมด (ใช้ตอนรีเฟรชหน้า)"""
     try:
@@ -70,7 +70,7 @@ def list_pairs():
 
 
 @copy_trading_bp.route('/api/pairs', methods=['POST'])
-@session_login_required
+@require_auth
 def create_copy_pair():
     """สร้าง Copy Pair ใหม่"""
     try:
@@ -116,7 +116,7 @@ def create_copy_pair():
 
 
 @copy_trading_bp.route('/api/pairs/<pair_id>', methods=['PUT'])
-@session_login_required
+@require_auth
 def update_copy_pair(pair_id):
     """อัพเดต Copy Pair"""
     try:
@@ -139,7 +139,7 @@ def update_copy_pair(pair_id):
 
 
 @copy_trading_bp.route('/api/pairs/<pair_id>', methods=['DELETE'])
-@session_login_required
+@require_auth
 def delete_pair(pair_id):
     """ลบ Copy Pair + log + save"""
     try:
@@ -158,7 +158,7 @@ def delete_pair(pair_id):
 
 
 @copy_trading_bp.route('/api/pairs/<pair_id>/toggle', methods=['POST'])
-@session_login_required
+@require_auth
 def toggle_copy_pair(pair_id):
     """เปิด/ปิด Copy Pair"""
     try:
@@ -179,7 +179,7 @@ def toggle_copy_pair(pair_id):
 
 
 @copy_trading_bp.route('/api/pairs/<pair_id>/add-master', methods=['POST'])
-@session_login_required
+@require_auth
 def add_master_to_pair(pair_id):
     '''
     เพิ่ม Master Account เข้าไปในคู่ที่มีอยู่แล้ว
@@ -279,7 +279,7 @@ def add_master_to_pair(pair_id):
 
 
 @copy_trading_bp.route('/api/pairs/<pair_id>/add-slave', methods=['POST'])
-@session_login_required
+@require_auth
 def add_slave_to_pair(pair_id):
     '''
     เพิ่ม Slave Account เข้าไปในคู่ที่มีอยู่แล้ว
@@ -384,7 +384,7 @@ def add_slave_to_pair(pair_id):
 # =================== Master/Slave Accounts Management ===================
 
 @copy_trading_bp.route('/api/copy/master-accounts', methods=['GET'])
-@session_login_required
+@require_auth
 def get_master_accounts():
     """ดึงรายการ Master Accounts ทั้งหมด"""
     try:
@@ -403,7 +403,7 @@ def get_master_accounts():
 
 
 @copy_trading_bp.route('/api/copy/master-accounts', methods=['POST'])
-@session_login_required
+@require_auth
 def add_master_account():
     """เพิ่ม Master Account"""
     try:
@@ -458,7 +458,7 @@ def add_master_account():
 
 
 @copy_trading_bp.route('/api/copy/master-accounts/<account_id>', methods=['DELETE'])
-@session_login_required
+@require_auth
 def delete_master_account(account_id):
     """ลบ Master Account"""
     try:
@@ -491,7 +491,7 @@ def delete_master_account(account_id):
 
 
 @copy_trading_bp.route('/api/copy/slave-accounts', methods=['GET'])
-@session_login_required
+@require_auth
 def get_slave_accounts():
     """ดึงรายการ Slave Accounts ทั้งหมด"""
     try:
@@ -510,7 +510,7 @@ def get_slave_accounts():
 
 
 @copy_trading_bp.route('/api/copy/slave-accounts', methods=['POST'])
-@session_login_required
+@require_auth
 def add_slave_account():
     """เพิ่ม Slave Account"""
     try:
@@ -565,7 +565,7 @@ def add_slave_account():
 
 
 @copy_trading_bp.route('/api/copy/slave-accounts/<account_id>', methods=['DELETE'])
-@session_login_required
+@require_auth
 def delete_slave_account(account_id):
     """ลบ Slave Account"""
     try:
@@ -674,7 +674,7 @@ def copy_trade_endpoint():
 
 
 @copy_trading_bp.route('/api/copy/history', methods=['GET'])
-@session_login_required
+@require_auth
 def get_copy_history():
     """ดึงประวัติการคัดลอก"""
     try:
@@ -693,7 +693,7 @@ def get_copy_history():
 
 
 @copy_trading_bp.route('/api/copy/history/clear', methods=['POST'])
-@session_login_required
+@require_auth
 def clear_copy_history():
     """ลบประวัติการคัดลอกทั้งหมด"""
     try:
@@ -717,7 +717,7 @@ def clear_copy_history():
 
 
 @copy_trading_bp.route('/copy-history/clear', methods=['POST'])
-@session_login_required
+@require_auth
 def clear_copy_history_legacy():
     """Backward-compat: รองรับเส้นทางเก่า /copy-history/clear"""
     try:

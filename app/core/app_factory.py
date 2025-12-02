@@ -10,6 +10,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_cors import CORS
 from dotenv import load_dotenv
+from app.middleware.rate_limit_helpers import get_rate_limit_key, is_localhost
 
 # Load environment variables
 load_dotenv()
@@ -44,11 +45,11 @@ def create_app():
         }
     })
 
-    # Initialize rate limiter
+    # Initialize rate limiter with custom key function
     limiter = Limiter(
         app=app,
-        key_func=get_remote_address,
-        default_limits=["200 per day", "50 per hour"],
+        key_func=get_rate_limit_key,
+        default_limits=["10000 per day", "1000 per hour"],
         storage_uri="memory://"
     )
 
@@ -142,6 +143,12 @@ def create_app():
     from app.routes.system_routes import system_bp, init_system_routes, register_error_handlers
     from app.routes.broker_balance_routes import broker_balance_bp, init_broker_balance_routes
 
+    # Import EA API routes
+    from app.routes.ea_api_routes import ea_api_bp, init_ea_api_routes
+
+    # Import trades blueprint
+    from app.trades import trades_bp
+
     # Helper for email sending (used by settings)
     def _email_send_alert(subject, message):
         return email_handler.send_alert(subject, message)
@@ -200,6 +207,14 @@ def create_app():
         lim=limiter
     )
 
+    # Initialize EA API routes
+    init_ea_api_routes(
+        cq=command_queue,
+        bm=balance_manager,
+        sm=session_manager,
+        lim=limiter
+    )
+
     logger.info("[APP_FACTORY] Routes initialized")
 
     # =================== Register Blueprints ===================
@@ -209,6 +224,8 @@ def create_app():
     app.register_blueprint(settings_bp)
     app.register_blueprint(system_bp)
     app.register_blueprint(broker_balance_bp)
+    app.register_blueprint(ea_api_bp)
+    app.register_blueprint(trades_bp)
 
     # Register UI routes last (so API routes take precedence)
     from app.routes.ui_routes import ui_bp

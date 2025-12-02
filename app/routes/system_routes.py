@@ -8,6 +8,7 @@ import json
 import logging
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_from_directory, Response, stream_with_context
+from app.middleware.auth import require_auth, session_login_required
 
 logger = logging.getLogger(__name__)
 
@@ -36,48 +37,40 @@ def init_system_routes(sls, sm):
 # =================== System Logs API ===================
 
 @system_bp.route('/api/system/logs', methods=['GET'])
+@require_auth
 def get_system_logs():
     """ดึง system logs"""
-    from app.middleware.auth import session_login_required
+    try:
+        limit = int(request.args.get('limit', 300))
+        limit = max(1, min(limit, 300))
 
-    @session_login_required
-    def _handler():
-        try:
-            limit = int(request.args.get('limit', 300))
-            limit = max(1, min(limit, 300))
+        logs = system_logs_service.get_logs(limit=limit)
 
-            logs = system_logs_service.get_logs(limit=limit)
+        return jsonify({
+            'success': True,
+            'logs': logs,
+            'total': len(logs)
+        }), 200
+    except Exception as e:
+        logger.error(f"[SYSTEM_LOGS] Error getting logs: {e}")
+        return jsonify({'error': str(e)}), 500
 
-            return jsonify({
-                'success': True,
-                'logs': logs,
-                'total': len(logs)
-            }), 200
-        except Exception as e:
-            logger.error(f"[SYSTEM_LOGS] Error getting logs: {e}")
-            return jsonify({'error': str(e)}), 500
-
-    return _handler()
 
 
 @system_bp.route('/api/system/logs/clear', methods=['POST'])
+@require_auth
 def clear_system_logs():
     """ล้าง system logs ทั้งหมด"""
-    from app.middleware.auth import session_login_required
+    try:
+        system_logs_service.clear_logs()
 
-    @session_login_required
-    def _handler():
-        try:
-            system_logs_service.clear_logs()
+        system_logs_service.add_log('info', 'System logs cleared')
 
-            system_logs_service.add_log('info', 'System logs cleared')
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        logger.error(f"[SYSTEM_LOGS] Error clearing logs: {e}")
+        return jsonify({'error': str(e)}), 500
 
-            return jsonify({'success': True}), 200
-        except Exception as e:
-            logger.error(f"[SYSTEM_LOGS] Error clearing logs: {e}")
-            return jsonify({'error': str(e)}), 500
-
-    return _handler()
 
 
 @system_bp.route('/events/system-logs', methods=['GET'])

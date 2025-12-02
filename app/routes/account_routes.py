@@ -6,7 +6,7 @@ import json
 import logging
 from pathlib import Path
 from flask import Blueprint, request, jsonify
-from app.middleware.auth import session_login_required
+from app.middleware.auth import require_auth
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def init_account_routes(sm, sls, aas, cm, ch, dah_fn):
 # =================== Account Management Routes ===================
 
 @account_bp.route('/accounts', methods=['GET'])
-@session_login_required
+@require_auth
 def get_accounts():
     """Get all accounts"""
     try:
@@ -59,7 +59,7 @@ def get_accounts():
 
 
 @account_bp.route('/accounts', methods=['POST'])
-@session_login_required
+@require_auth
 def add_account():
     """Add a new account"""
     try:
@@ -90,28 +90,28 @@ def add_account():
 
 
 @account_bp.route('/accounts/<account>/restart', methods=['POST'])
-@session_login_required
+@require_auth
 def restart_account(account):
     """Restart account (not available in remote mode)"""
     return jsonify({'error': 'Not available in remote mode'}), 400
 
 
 @account_bp.route('/accounts/<account>/stop', methods=['POST'])
-@session_login_required
+@require_auth
 def stop_account(account):
     """Stop account (not available in remote mode)"""
     return jsonify({'error': 'Not available in remote mode'}), 400
 
 
 @account_bp.route('/accounts/<account>/open', methods=['POST'])
-@session_login_required
+@require_auth
 def open_account(account):
     """Open account (not available in remote mode)"""
     return jsonify({'error': 'Not available in remote mode'}), 400
 
 
 @account_bp.route('/accounts/<account>/pause', methods=['POST'])
-@session_login_required
+@require_auth
 def pause_account(account):
     """Pause account - set status to PAUSE to block incoming signals"""
     try:
@@ -134,7 +134,7 @@ def pause_account(account):
 
 
 @account_bp.route('/accounts/<account>/resume', methods=['POST'])
-@session_login_required
+@require_auth
 def resume_account(account):
     """Resume account - set status back to Online"""
     try:
@@ -162,7 +162,7 @@ def resume_account(account):
 
 
 @account_bp.route('/accounts/<account>', methods=['DELETE'])
-@session_login_required
+@require_auth
 def delete_account(account):
     """Delete account and cleanup all associated data"""
     try:
@@ -263,7 +263,7 @@ def delete_account(account):
 # =================== Secret Key Management Routes ===================
 
 @account_bp.route('/settings/secret', methods=['GET'])
-@session_login_required
+@require_auth
 def get_global_secret():
     """Get Global Secret Key"""
     try:
@@ -278,7 +278,7 @@ def get_global_secret():
 
 
 @account_bp.route('/settings/secret', methods=['POST'])
-@session_login_required
+@require_auth
 def update_global_secret():
     """Update Global Secret Key"""
     try:
@@ -354,7 +354,7 @@ def get_symbol_mappings(account):
 
 
 @account_bp.route('/accounts/<account>/symbols', methods=['POST'])
-@session_login_required
+@require_auth
 def update_symbol_mappings(account):
     """Update symbol mappings"""
     try:
@@ -426,7 +426,7 @@ def update_symbol_mappings(account):
 
 
 @account_bp.route('/accounts/<account>/symbols/<from_symbol>', methods=['DELETE'])
-@session_login_required
+@require_auth
 def delete_symbol_mapping(account, from_symbol):
     """Delete symbol mapping"""
     try:
@@ -459,7 +459,7 @@ def delete_symbol_mapping(account, from_symbol):
 
 
 @account_bp.route('/accounts/symbols/overview', methods=['GET'])
-@session_login_required
+@require_auth
 def get_all_symbol_mappings():
     """Get all symbol mappings overview"""
     try:
@@ -499,14 +499,14 @@ def get_all_symbol_mappings():
 # =================== Webhook Account Allowlist Management Routes ===================
 
 @account_bp.route('/webhook-accounts', methods=['GET'])
-@session_login_required
+@require_auth
 def list_webhook_accounts():
     """Get list of webhook allowed accounts"""
     return jsonify({"accounts": account_allowlist_service.get_webhook_allowlist()})
 
 
 @account_bp.route('/webhook-accounts', methods=['POST'])
-@session_login_required
+@require_auth
 def add_webhook_account():
     """Add or update webhook allowed account"""
     data = request.get_json(silent=True) or {}
@@ -535,7 +535,7 @@ def add_webhook_account():
 
 
 @account_bp.route('/webhook-accounts/<account>', methods=['DELETE'])
-@session_login_required
+@require_auth
 def delete_webhook_account(account):
     """Remove account from webhook allowlist"""
     if account_allowlist_service.delete_webhook_account(account):

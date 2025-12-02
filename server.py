@@ -17,15 +17,25 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Configure logging
+# Configure logging with UTF-8 encoding for Windows
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
     handlers=[
-        logging.FileHandler('trading_bot.log'),
+        logging.FileHandler('trading_bot.log', encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
+
+# Fix StreamHandler encoding for Windows console
+import sys
+if sys.platform == 'win32':
+    # Force UTF-8 for console output on Windows
+    import codecs
+    if sys.stdout.encoding != 'utf-8':
+        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+    if sys.stderr.encoding != 'utf-8':
+        sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
 
 logger = logging.getLogger(__name__)
 

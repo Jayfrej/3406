@@ -4,7 +4,7 @@ Handles broker data registration, account balance updates, and related queries
 """
 import logging
 from flask import Blueprint, request, jsonify
-from app.middleware.auth import session_login_required
+from app.middleware.auth import require_auth
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +125,7 @@ def register_broker_data():
 
 
 @broker_balance_bp.route('/api/broker/<account>', methods=['GET'])
-@session_login_required
+@require_auth
 def get_broker_data(account):
     """ดึงข้อมูลโบรกเกอร์ของบัญชี"""
     try:
@@ -142,7 +142,7 @@ def get_broker_data(account):
 
 
 @broker_balance_bp.route('/api/broker/stats', methods=['GET'])
-@session_login_required
+@require_auth
 def get_broker_stats():
     """ดึงสถิติข้อมูลโบรกเกอร์"""
     try:
@@ -222,7 +222,7 @@ def update_account_balance():
 
 
 @broker_balance_bp.route('/api/account/<account>/balance', methods=['GET'])
-@session_login_required
+@require_auth
 def get_account_balance(account):
     """ดึงข้อมูล balance ของ account"""
     try:
@@ -239,7 +239,7 @@ def get_account_balance(account):
 
 
 @broker_balance_bp.route('/api/account/balance/all', methods=['GET'])
-@session_login_required
+@require_auth
 def get_all_account_balances():
     """ดึงข้อมูล balance ของทุก account"""
     try:
@@ -251,7 +251,7 @@ def get_all_account_balances():
 
 
 @broker_balance_bp.route('/api/account/balance/status', methods=['GET'])
-@session_login_required
+@require_auth
 def get_balance_manager_status():
     """ดึงสถานะของ Balance Manager"""
     try:
