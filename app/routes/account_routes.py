@@ -260,6 +260,242 @@ def delete_account(account):
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+# =================== Secret Key Management Routes ===================
+
+@account_bp.route('/settings/secret', methods=['GET'])
+@session_login_required
+def get_global_secret():
+    """Get Global Secret Key"""
+    try:
+        secret = session_manager.get_global_secret()
+        return jsonify({
+            'secret': secret or '',
+            'enabled': bool(secret)
+        })
+    except Exception as e:
+        logger.error(f"[GET_GLOBAL_SECRET_ERROR] {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@account_bp.route('/settings/secret', methods=['POST'])
+@session_login_required
+def update_global_secret():
+    """Update Global Secret Key"""
+    try:
+        data = request.get_json() or {}
+        secret = data.get('secret', '').strip()
+
+        if session_manager.update_global_secret(secret):
+            action = 'updated' if secret else 'removed'
+            system_logs_service.add_log('success', f'🔐 Global secret key {action}')
+            logger.info(f"[GLOBAL_SECRET] {action.capitalize()}")
+            return jsonify({
+                'success': True,
+                'message': f'Secret key {action} successfully'
+            })
+        else:
+            return jsonify({'error': 'Failed to update secret key'}), 500
+
+    except Exception as e:
+        logger.error(f"[UPDATE_GLOBAL_SECRET_ERROR] {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@account_bp.route('/accounts/<account>/secret', methods=['GET'])
+def get_account_secret(account):
+    """Get per-account secret (for backward compatibility)"""
+    try:
+        return jsonify({'secret': ''})
+    except Exception as e:
+        logger.error(f"[GET_ACCOUNT_SECRET_ERROR] {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@account_bp.route('/accounts/<account>/secret', methods=['POST'])
+def update_account_secret(account):
+    """Update per-account secret (for backward compatibility)"""
+    try:
+        return jsonify({
+            'success': True,
+            'message': 'Please use global secret key instead'
+        })
+    except Exception as e:
+        logger.error(f"[UPDATE_ACCOUNT_SECRET_ERROR] {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# =================== Symbol Mapping Management Routes ===================
+
+@account_bp.route('/accounts/<account>/symbols', methods=['GET'])
+def get_symbol_mappings(account):
+    """Get symbol mappings for account"""
+    try:
+        if not session_manager.account_exists(account):
+            return jsonify({'error': 'Account not found'}), 404
+
+        mappings = session_manager.get_symbol_mappings(account)
+
+        # Convert list to dict if needed
+        if isinstance(mappings, list):
+            mapping_dict = {}
+            for item in mappings:
+                if isinstance(item, dict):
+                    from_sym = item.get('from', '')
+                    to_sym = item.get('to', '')
+                    if from_sym and to_sym:
+                        mapping_dict[from_sym] = to_sym
+            return jsonify({'mappings': mapping_dict})
+
+        return jsonify({'mappings': mappings or {}})
+
+    except Exception as e:
+        logger.error(f"[GET_SYMBOL_MAPPINGS_ERROR] {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@account_bp.route('/accounts/<account>/symbols', methods=['POST'])
+@session_login_required
+def update_symbol_mappings(account):
+    """Update symbol mappings"""
+    try:
+        if not session_manager.account_exists(account):
+            return jsonify({'error': 'Account not found'}), 404
+
+        data = request.get_json() or {}
+
+        # Handle single add
+        if 'from_symbol' in data and 'to_symbol' in data:
+            from_symbol = str(data.get('from_symbol', '')).strip().upper()
+            to_symbol = str(data.get('to_symbol', '')).strip().upper()
+
+            if not from_symbol or not to_symbol:
+                return jsonify({'error': 'Both symbols required'}), 400
+
+            current_mappings = session_manager.get_symbol_mappings(account)
+            if isinstance(current_mappings, dict):
+                current_mappings = [{'from': k, 'to': v} for k, v in current_mappings.items()]
+
+            # Check duplicate
+            for mapping in current_mappings:
+                if mapping.get('from', '').upper() == from_symbol:
+                    return jsonify({'error': 'Mapping exists'}), 400
+
+            current_mappings.append({'from': from_symbol, 'to': to_symbol})
+
+            if session_manager.update_symbol_mappings(account, current_mappings):
+                system_logs_service.add_log('success', f'✅ Mapping added: {from_symbol}→{to_symbol} ({account})')
+                return jsonify({
+                    'success': True,
+                    'message': f'Added: {from_symbol} → {to_symbol}'
+                })
+            return jsonify({'error': 'Failed to add'}), 500
+
+        # Handle bulk update
+        mappings = data.get('mappings', [])
+        mapping_list = []
+
+        if isinstance(mappings, list):
+            for item in mappings:
+                if isinstance(item, dict):
+                    from_sym = str(item.get('from', '')).strip().upper()
+                    to_sym = str(item.get('to', '')).strip().upper()
+                    if from_sym and to_sym:
+                        mapping_list.append({'from': from_sym, 'to': to_sym})
+
+        elif isinstance(mappings, dict):
+            for from_sym, to_sym in mappings.items():
+                from_sym = str(from_sym).strip().upper()
+                to_sym = str(to_sym).strip().upper()
+                if from_sym and to_sym:
+                    mapping_list.append({'from': from_sym, 'to': to_sym})
+
+        if session_manager.update_symbol_mappings(account, mapping_list):
+            system_logs_service.add_log('success', f'🔄 Mappings updated: {account} ({len(mapping_list)} items)')
+            mapping_dict = {m['from']: m['to'] for m in mapping_list}
+            return jsonify({
+                'success': True,
+                'message': 'Mappings updated',
+                'count': len(mapping_list),
+                'mappings': mapping_dict
+            })
+        return jsonify({'error': 'Failed to update'}), 500
+
+    except Exception as e:
+        logger.error(f"[UPDATE_MAPPINGS_ERROR] {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@account_bp.route('/accounts/<account>/symbols/<from_symbol>', methods=['DELETE'])
+@session_login_required
+def delete_symbol_mapping(account, from_symbol):
+    """Delete symbol mapping"""
+    try:
+        if not session_manager.account_exists(account):
+            return jsonify({'error': 'Account not found'}), 404
+
+        from_symbol = from_symbol.upper()
+        mappings = session_manager.get_symbol_mappings(account)
+
+        if isinstance(mappings, dict):
+            mappings = [{'from': k, 'to': v} for k, v in mappings.items()]
+
+        original_count = len(mappings)
+        mappings = [m for m in mappings if m.get('from', '').upper() != from_symbol]
+
+        if len(mappings) == original_count:
+            return jsonify({'error': 'Not found'}), 404
+
+        if session_manager.update_symbol_mappings(account, mappings):
+            system_logs_service.add_log('success', f'🗑️ Mapping deleted: {from_symbol} ({account})')
+            return jsonify({
+                'success': True,
+                'remaining_count': len(mappings)
+            })
+        return jsonify({'error': 'Failed to delete'}), 500
+
+    except Exception as e:
+        logger.error(f"[DELETE_MAPPING_ERROR] {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@account_bp.route('/accounts/symbols/overview', methods=['GET'])
+@session_login_required
+def get_all_symbol_mappings():
+    """Get all symbol mappings overview"""
+    try:
+        accounts = session_manager.get_all_accounts()
+        overview = {}
+
+        for acc in accounts:
+            account_num = acc['account']
+            mappings = session_manager.get_symbol_mappings(account_num)
+
+            if isinstance(mappings, list) and len(mappings) > 0:
+                mapping_dict = {}
+                for item in mappings:
+                    if isinstance(item, dict):
+                        from_sym = item.get('from', '')
+                        to_sym = item.get('to', '')
+                        if from_sym and to_sym:
+                            mapping_dict[from_sym] = to_sym
+                mappings = mapping_dict
+
+            if mappings:
+                overview[account_num] = {
+                    'nickname': acc.get('nickname', ''),
+                    'mappings': mappings
+                }
+
+        return jsonify({
+            'success': True,
+            'data': overview
+        })
+
+    except Exception as e:
+        logger.error(f"[GET_ALL_MAPPINGS_ERROR] {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 # =================== Webhook Account Allowlist Management Routes ===================
 
 @account_bp.route('/webhook-accounts', methods=['GET'])
