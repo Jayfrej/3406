@@ -36,6 +36,14 @@ def create_app():
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
     app.config['JSON_AS_ASCII'] = False  # Support Thai characters
 
+    # CRITICAL: Session cookie configuration (จำเป็นมากสำหรับ auth)
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,       # ป้องกัน JavaScript เข้าถึง cookie
+        SESSION_COOKIE_SAMESITE='Lax',      # อนุญาตให้ส่ง cookie ใน same-site requests
+        SESSION_COOKIE_SECURE=False,        # ใช้ True ถ้าเป็น HTTPS
+        PERMANENT_SESSION_LIFETIME=3600     # session หมดอายุใน 1 ชั่วโมง
+    )
+
     # Enable CORS for cross-origin API requests
     CORS(app, resources={
         r"/api/*": {
