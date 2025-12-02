@@ -56,14 +56,9 @@ def init_webhook_routes(ws, sm, st, eh, sls, lim, aas):
 
 @webhook_bp.route('/webhook-url', methods=['GET'])
 def get_webhook_url():
-    """Get webhook URL with token"""
-    from app.middleware.auth import session_login_required
+    """Get webhook URL with token (public endpoint - no auth required)"""
+    return jsonify({'url': f"{EXTERNAL_BASE_URL}/webhook/{WEBHOOK_TOKEN}"})
 
-    @session_login_required
-    def _handler():
-        return jsonify({'url': f"{EXTERNAL_BASE_URL}/webhook/{WEBHOOK_TOKEN}"})
-
-    return _handler()
 
 
 @webhook_bp.route('/webhook', methods=['GET'])
