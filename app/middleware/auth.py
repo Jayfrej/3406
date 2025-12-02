@@ -23,8 +23,10 @@ def session_login_required(f):
 
 def require_auth(f):
     """
-    Basic Authentication decorator - Use for data endpoints
-    Validates HTTP Basic Auth credentials against environment variables
+    Flexible Authentication decorator - Use for data endpoints
+    Accepts EITHER:
+    - Valid session cookie (session['auth'] == True), OR
+    - Valid HTTP Basic Auth credentials
     Skips authentication for localhost health checks
     """
     @wraps(f)
@@ -34,6 +36,11 @@ def require_auth(f):
             if request.path in ['/health', '/webhook/health']:
                 return f(*args, **kwargs)
 
+        # Check if user has valid session
+        if session.get('auth'):
+            return f(*args, **kwargs)
+
+        # Check Basic Auth as fallback
         auth = request.authorization
 
         if not auth:

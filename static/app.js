@@ -112,7 +112,8 @@ class TradingBotUI {
     const res = await fetch('/login', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ username: u, password: p })
+      body: JSON.stringify({ username: u, password: p }),
+      credentials: 'include'  // Required to store session cookie
     });
 
     if (!res.ok) {
@@ -125,7 +126,13 @@ class TradingBotUI {
 
   async fetchWithAuth(url, options = {}) {
     try {
-      const response = await fetch(url, options);
+      // Always include credentials for session cookie support
+      const fetchOptions = {
+        ...options,
+        credentials: 'include'
+      };
+
+      const response = await fetch(url, fetchOptions);
 
       // If 401, re-authenticate and retry
       if (response.status === 401) {
@@ -134,7 +141,7 @@ class TradingBotUI {
         await this.ensureLogin();
 
         // Retry the request
-        const retryResponse = await fetch(url, options);
+        const retryResponse = await fetch(url, fetchOptions);
         return retryResponse;
       }
 
