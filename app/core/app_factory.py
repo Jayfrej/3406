@@ -8,6 +8,7 @@ import threading
 from flask import Flask
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_cors import CORS
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -28,11 +29,20 @@ def create_app():
     Returns:
         Flask: Configured Flask application instance
     """
-    app = Flask(__name__, static_folder='../static', static_url_path='/static')
+    app = Flask(__name__, static_folder='../../static', static_url_path='/static')
 
     # Load configuration
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
     app.config['JSON_AS_ASCII'] = False  # Support Thai characters
+
+    # Enable CORS for cross-origin API requests
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": ["http://localhost:*", "http://127.0.0.1:*", "http://192.168.*.*:*"],
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"]
+        }
+    })
 
     # Initialize rate limiter
     limiter = Limiter(
@@ -205,6 +215,12 @@ def create_app():
     app.register_blueprint(ui_bp)
 
     logger.info("[APP_FACTORY] Blueprints registered")
+
+    # Debug: Log all registered routes
+    logger.info("[APP_FACTORY] Registered routes:")
+    for rule in app.url_map.iter_rules():
+        methods = ','.join(sorted(rule.methods - {'HEAD', 'OPTIONS'}))
+        logger.info(f"  {rule.endpoint:40s} {rule.rule:50s} [{methods}]")
 
     # Initialize trades (requires app context)
     with app.app_context():

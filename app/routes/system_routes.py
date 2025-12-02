@@ -167,18 +167,37 @@ def accounts_stats():
     return jsonify({'ok': True, 'total': total, 'online': online, 'offline': offline})
 
 
-# =================== Static Files ===================
+# =================== Authentication ===================
 
-@system_bp.route('/', methods=['GET'])
-def index():
-    """Serve index.html"""
-    return send_from_directory('static', 'index.html')
+@system_bp.route('/login', methods=['POST'])
+def login_api():
+    """Login endpoint for UI authentication"""
+    import os
+    from flask import session
 
+    try:
+        data = request.json or {}
+        username = data.get("username", "")
+        password = data.get("password", "")
 
-@system_bp.route('/static/<path:filename>', methods=['GET'])
-def static_files(filename):
-    """Serve static files"""
-    return send_from_directory('static', filename)
+        BASIC_USER = os.getenv('BASIC_USER', 'admin')
+        BASIC_PASS = os.getenv('BASIC_PASS', '')
+
+        if username == BASIC_USER and password == BASIC_PASS:
+            session["auth"] = True
+            ip = request.remote_addr
+            system_logs_service.add_log('success', f'🔓 [200] Login successful - User: {username}, IP: {ip}')
+            logger.info(f"[LOGIN] Successful login from {ip} - User: {username}")
+            return jsonify({"ok": True}), 200
+
+        ip = request.remote_addr
+        system_logs_service.add_log('warning', f'🔒 [401] Login failed - User: {username}, IP: {ip}')
+        logger.warning(f"[LOGIN] Failed login attempt from {ip} - User: {username}")
+        return jsonify({"ok": False, "error": "Invalid credentials"}), 401
+
+    except Exception as e:
+        logger.error(f"[LOGIN] Error: {e}")
+        return jsonify({"ok": False, "error": "Login error"}), 500
 
 
 # =================== Error Handlers ===================
