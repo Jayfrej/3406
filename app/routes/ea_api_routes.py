@@ -132,7 +132,7 @@ def debug_commands(account):
             }), 500
 
         # Get all commands for this account
-        commands = command_queue.get_commands(str(account))
+        commands = command_queue.get_pending_commands(str(account), limit=100)
 
         return jsonify({
             'account': account,

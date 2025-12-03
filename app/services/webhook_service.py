@@ -329,7 +329,7 @@ class WebhookService:
 
             if success:
                 # ✅ Enhanced logging with queue size
-                queue_size = len(self.command_queue.get_commands(account))
+                queue_size = self.command_queue.get_queue_size(account)
                 self.logger.info(
                     f"[WRITE_CMD] ✅ Added to queue: {command.get('action')} "
                     f"{command.get('symbol', 'N/A')} for {account} | Queue size: {queue_size}"
