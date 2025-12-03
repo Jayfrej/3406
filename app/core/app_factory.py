@@ -111,7 +111,8 @@ def create_app():
     )
     copy_executor = CopyExecutor(
         session_manager=session_manager,
-        copy_history=copy_history
+        copy_history=copy_history,
+        command_queue=command_queue
     )
     copy_handler = CopyHandler(
         copy_manager=copy_manager,
