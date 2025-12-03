@@ -5634,7 +5634,14 @@ async removeSymbolMapping(from) {
       let savedMappings = [];
       if (mappingsResponse.ok) {
         const mappingsData = await mappingsResponse.json();
-        savedMappings = mappingsData.mappings || [];
+        const mappings = mappingsData.mappings || {};
+
+        // Convert dict to array format: {A: B} → [{from: A, to: B}]
+        if (typeof mappings === 'object' && !Array.isArray(mappings)) {
+          savedMappings = Object.entries(mappings).map(([from, to]) => ({from, to}));
+        } else if (Array.isArray(mappings)) {
+          savedMappings = mappings;
+        }
       }
 
       this.hideLoading();
