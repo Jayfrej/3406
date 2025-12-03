@@ -104,3 +104,47 @@ def check_balance_update_needed(account):
         logger.error(f"[BALANCE_CHECK] Error for {account}: {e}")
         return jsonify({'need_update': False}), 500
 
+
+@ea_api_bp.route('/debug/commands/<account>', methods=['GET'])
+def debug_commands(account):
+    """
+    Debug endpoint to check queued commands
+    GET /debug/commands/279289341
+
+    Note: This endpoint requires authentication in production
+    """
+    try:
+        if not command_queue:
+            return jsonify({
+                'account': account,
+                'queue_size': 0,
+                'commands': [],
+                'error': 'Command queue not initialized'
+            }), 500
+
+        # Get all commands for this account
+        commands = command_queue.get_commands(str(account))
+
+        return jsonify({
+            'account': account,
+            'queue_size': len(commands),
+            'commands': commands,
+            'timestamp': import_time()
+        }), 200
+
+    except Exception as e:
+        logger.error(f"[DEBUG_COMMANDS] Error for {account}: {e}")
+        return jsonify({
+            'account': account,
+            'error': str(e),
+            'queue_size': 0,
+            'commands': []
+        }), 500
+
+
+def import_time():
+    """Helper to get current timestamp"""
+    import time
+    return time.time()
+
+

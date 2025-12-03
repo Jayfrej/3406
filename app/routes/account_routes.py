@@ -6,7 +6,7 @@ import json
 import logging
 from pathlib import Path
 from flask import Blueprint, request, jsonify
-from app.middleware.auth import require_auth
+from app.middleware.auth import require_auth, session_login_required
 
 logger = logging.getLogger(__name__)
 
@@ -241,6 +241,14 @@ def delete_account(account):
             except Exception as e:
                 logger.warning(f'[COPY_HISTORY_CLEANUP_ERROR] {e}')
 
+            # ✅ FIX: Broadcast account deletion event via SSE
+            try:
+                from app.services.sse_service import broadcast_account_deleted
+                broadcast_account_deleted(account, deleted_pairs_count)
+                logger.info(f'[SSE_BROADCAST] Account deletion event sent for {account}')
+            except Exception as e:
+                logger.warning(f'[SSE_BROADCAST_ERROR] {e}')
+
             # Log summary
             if cleanup_logs:
                 cleanup_summary = ', '.join(cleanup_logs)
@@ -251,7 +259,14 @@ def delete_account(account):
             return jsonify({
                 'ok': True,
                 'deleted_pairs': deleted_pairs_count,
-                'message': f'Account deleted with {deleted_pairs_count} copy pair(s) removed'
+                'deleted_history': deleted_history_count,
+                'message': f'Account deleted with {deleted_pairs_count} copy pair(s) removed',
+                # ✅ FIX: Return cleanup details for UI
+                'cleanup': {
+                    'pairs': deleted_pairs_count,
+                    'history': deleted_history_count,
+                    'logs': cleanup_logs
+                }
             }), 200
         else:
             return jsonify({'ok': False}), 200
@@ -543,4 +558,126 @@ def delete_webhook_account(account):
         return jsonify({"ok": True})
     else:
         return jsonify({"error": "Failed to delete webhook account"}), 500
+
+
+# =================== Symbol Mapping API Routes (New Endpoints) ===================
+
+@account_bp.route('/api/symbol-mappings/<account>', methods=['GET'])
+@session_login_required
+def get_symbol_mappings_api(account):
+    """
+    Get symbol mappings for account (API endpoint alias)
+
+    This is an alias for /accounts/<account>/symbols
+    to maintain compatibility with frontend
+    """
+    try:
+        if not session_manager.account_exists(account):
+            return jsonify({'error': 'Account not found'}), 404
+
+        mappings = session_manager.get_symbol_mappings(account)
+
+        return jsonify({
+            'success': True,
+            'account': account,
+            'mappings': mappings,
+            'count': len(mappings) if mappings else 0
+        }), 200
+
+    except Exception as e:
+        logger.error(f"[GET_SYMBOL_MAPPINGS_API_ERROR] {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@account_bp.route('/api/symbol-mappings/<account>', methods=['POST'])
+@session_login_required
+def add_symbol_mapping_api(account):
+    """
+    Add a single symbol mapping (API endpoint)
+    """
+    try:
+        data = request.get_json() or {}
+        from_symbol = str(data.get('from', '')).strip().upper()
+        to_symbol = str(data.get('to', '')).strip().upper()
+
+        if not from_symbol or not to_symbol:
+            return jsonify({'error': 'Both from and to symbols are required'}), 400
+
+        if not session_manager.account_exists(account):
+            return jsonify({'error': 'Account not found'}), 404
+
+        # Get existing mappings
+        mappings = session_manager.get_symbol_mappings(account)
+        if not isinstance(mappings, list):
+            mappings = []
+
+        # Check for duplicate
+        for mapping in mappings:
+            if isinstance(mapping, dict) and mapping.get('from', '').upper() == from_symbol:
+                return jsonify({'error': f'Mapping for {from_symbol} already exists'}), 400
+
+        # Add new mapping
+        new_mapping = {'from': from_symbol, 'to': to_symbol}
+        mappings.append(new_mapping)
+
+        # Save
+        if session_manager.update_symbol_mappings(account, mappings):
+            logger.info(f"[SYMBOL_MAPPING] Added {from_symbol} → {to_symbol} for account {account}")
+            system_logs_service.add_log('success',
+                f'✅ [201] Symbol mapping added: {from_symbol} → {to_symbol} (Account: {account})')
+
+            return jsonify({
+                'success': True,
+                'message': f'Mapping added: {from_symbol} → {to_symbol}',
+                'mapping': new_mapping
+            }), 201
+        else:
+            return jsonify({'error': 'Failed to add symbol mapping'}), 500
+
+    except Exception as e:
+        logger.error(f"[ADD_SYMBOL_MAPPING_API_ERROR] {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@account_bp.route('/api/symbol-mappings/<account>/<from_symbol>', methods=['DELETE'])
+@session_login_required
+def delete_symbol_mapping_api(account, from_symbol):
+    """
+    Delete a symbol mapping (API endpoint)
+    """
+    try:
+        from_symbol = from_symbol.upper()
+
+        if not session_manager.account_exists(account):
+            return jsonify({'error': 'Account not found'}), 404
+
+        # Get existing mappings
+        mappings = session_manager.get_symbol_mappings(account)
+        if not isinstance(mappings, list):
+            mappings = []
+
+        # Find and remove mapping
+        original_count = len(mappings)
+        mappings = [m for m in mappings if isinstance(m, dict) and m.get('from', '').upper() != from_symbol]
+
+        if len(mappings) == original_count:
+            return jsonify({'error': f'Mapping for {from_symbol} not found'}), 404
+
+        # Save
+        if session_manager.update_symbol_mappings(account, mappings):
+            logger.info(f"[SYMBOL_MAPPING] Deleted mapping for {from_symbol} (Account: {account})")
+            system_logs_service.add_log('warning',
+                f'🗑️ [200] Symbol mapping deleted: {from_symbol} (Account: {account})')
+
+            return jsonify({
+                'success': True,
+                'message': f'Mapping for {from_symbol} deleted'
+            }), 200
+        else:
+            return jsonify({'error': 'Failed to delete symbol mapping'}), 500
+
+    except Exception as e:
+        logger.error(f"[DELETE_SYMBOL_MAPPING_API_ERROR] {e}")
+        return jsonify({'error': str(e)}), 500
+
 

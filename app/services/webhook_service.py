@@ -27,6 +27,13 @@ class WebhookService:
         self.record_and_broadcast = record_and_broadcast_fn
         self.logger = logger_instance or logger
 
+        # ✅ Debug: ยืนยันว่าได้รับ command_queue
+        self.logger.info(f"[WEBHOOK_SERVICE] Initialized with command_queue: {type(command_queue)}")
+        if command_queue is None:
+            self.logger.error("[WEBHOOK_SERVICE] ❌❌❌ command_queue is None!")
+        else:
+            self.logger.info("[WEBHOOK_SERVICE] ✅ command_queue received successfully")
+
     def normalize_action(self, action: str) -> str:
         """
         Normalize action aliases to standard actions
@@ -304,22 +311,43 @@ class WebhookService:
             bool: True if sent successfully
         """
         try:
+            # ✅ Debug: ตรวจสอบว่า command_queue มีอยู่หรือไม่
+            if not hasattr(self, 'command_queue'):
+                self.logger.error("[WRITE_CMD] ❌❌❌ command_queue attribute not found! Check __init__()")
+                return False
+
+            if self.command_queue is None:
+                self.logger.error("[WRITE_CMD] ❌❌❌ command_queue is None!")
+                return False
+
+            self.logger.debug(f"[WRITE_CMD] 🔍 command_queue type: {type(self.command_queue)}")
+
             account = str(account)
 
             # Send command to Command Queue (API Mode only)
             success = self.command_queue.add_command(account, command)
 
             if success:
+                # ✅ Enhanced logging with queue size
+                queue_size = len(self.command_queue.get_commands(account))
                 self.logger.info(
                     f"[WRITE_CMD] ✅ Added to queue: {command.get('action')} "
-                    f"{command.get('symbol')} for {account}"
+                    f"{command.get('symbol', 'N/A')} for {account} | Queue size: {queue_size}"
                 )
+
+                # ✅ Log command details for debugging
+                import json
+                self.logger.debug(f"[WRITE_CMD] Command details: {json.dumps(command, indent=2)}")
             else:
                 self.logger.error(f"[WRITE_CMD] ❌ Failed to add to queue for {account}")
 
             return success
 
+        except AttributeError as e:
+            self.logger.error(f"[WRITE_CMD] ❌❌❌ AttributeError: {e}")
+            self.logger.error("[WRITE_CMD] command_queue not passed during __init__()!")
+            return False
         except Exception as e:
-            self.logger.error(f"[WRITE_CMD_ERROR] {e}")
+            self.logger.error(f"[WRITE_CMD_ERROR] {e}", exc_info=True)
             return False
 

@@ -581,22 +581,25 @@ async loadData() {
         const response = await fetch(endpoint, { method: 'DELETE' });
         const data = await response.json();
 
-        if (response.ok) {
-          // Show toast with deleted pairs count
+        if (response.ok && data.ok) {
+          // ✅ FIX: Show comprehensive cleanup details
           const deletedPairs = data.deleted_pairs || 0;
-          const message = deletedPairs > 0
+          const cleanupMsg = deletedPairs > 0
             ? `Account deleted (removed ${deletedPairs} copy pair(s))`
             : 'Account deleted successfully';
-          this.showToast(message, 'success');
 
-          // 1. Reload Account Management
+          this.showToast(cleanupMsg, 'success');
+
+          // ✅ FIX: Comprehensive cleanup sequence
+
+          // 1. Reload Account Management data
           await this.loadAccountManagementData();
           await this.loadData();
 
-          // 2. Reload Copy Trading pairs (removes deleted pairs)
+          // 2. Reload Copy Trading pairs (removes deleted pairs from server)
           await this.loadCopyPairs();
 
-          // 3. Filter out deleted account from Master/Slave lists
+          // 3. Filter out deleted account from Master/Slave local arrays
           this.masterAccounts = this.masterAccounts.filter(
             a => String(a.accountNumber) !== String(account)
           );
@@ -604,12 +607,34 @@ async loadData() {
             a => String(a.accountNumber) !== String(account)
           );
 
-          // 4. Re-render Master/Slave Cards
-          this.renderMasterAccounts();
-          this.renderSlaveAccounts();
-          this.updatePairCount();
+          // 4. Re-render Master/Slave Cards in Copy Trading page
+          if (typeof this.renderMasterAccounts === 'function') {
+            this.renderMasterAccounts();
+          }
+          if (typeof this.renderSlaveAccounts === 'function') {
+            this.renderSlaveAccounts();
+          }
+          if (typeof this.updatePairCount === 'function') {
+            this.updatePairCount();
+          }
 
+          // 5. Re-render Copy Pairs table
+          if (typeof this.renderCopyPairs === 'function') {
+            this.renderCopyPairs();
+          }
+          if (typeof this.renderPlans === 'function') {
+            this.renderPlans();
+          }
+          if (typeof this.renderActivePairsTable === 'function') {
+            this.renderActivePairsTable();
+          }
+
+          // ✅ Log comprehensive summary
           console.log(`[DELETE_ACCOUNT] Account ${account} deleted, ${deletedPairs} pairs removed`);
+          console.log(`[CLEANUP_COMPLETE] Account ${account} removed from all systems`);
+          console.log(`[CLEANUP_COMPLETE] Pairs deleted: ${deletedPairs}`);
+          console.log(`[CLEANUP_COMPLETE] Master accounts remaining: ${this.masterAccounts.length}`);
+          console.log(`[CLEANUP_COMPLETE] Slave accounts remaining: ${this.slaveAccounts.length}`);
         } else {
           this.showToast(data.error || 'Failed to delete account', 'error');
         }
@@ -4687,6 +4712,8 @@ async removeSymbolMapping(from) {
         try { this._systemEs.close(); } catch {}
       }
       const es = new EventSource('/events/system-logs');
+
+      // Existing log handler
       es.onmessage = (evt) => {
         try {
           const data = JSON.parse(evt.data);
@@ -4695,7 +4722,53 @@ async removeSymbolMapping(from) {
           console.warn('Invalid system log event:', e);
         }
       };
-      es.onerror = () => {};
+
+      // ✅ FIX: Add account_deleted event handler
+      es.addEventListener('account_deleted', async (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('[SSE] Account deleted event:', data);
+
+          // Force UI refresh
+          await Promise.all([
+            this.loadAccountManagementData?.(),
+            this.loadData?.(),
+            this.loadCopyPairs?.(),
+            this.loadMasterAccounts?.(),
+            this.loadSlaveAccounts?.()
+          ]);
+
+          // Show notification
+          this.showToast(
+            `Account ${data.account} deleted (${data.deleted_pairs || 0} pair(s) removed)`,
+            'info'
+          );
+        } catch (e) {
+          console.error('[SSE] Error handling account_deleted:', e);
+        }
+      });
+
+      // ✅ FIX: Add pair_deleted event handler
+      es.addEventListener('pair_deleted', async (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('[SSE] Pair deleted event:', data);
+
+          // Refresh copy pairs
+          if (typeof this.loadCopyPairs === 'function') {
+            await this.loadCopyPairs();
+          }
+        } catch (e) {
+          console.error('[SSE] Error handling pair_deleted:', e);
+        }
+      });
+
+      es.onerror = (error) => {
+        console.error('[SSE] Connection error:', error);
+        // Reconnect after delay
+        setTimeout(() => this.subscribeSystemLogs(), 5000);
+      };
+
       this._systemEs = es;
     } catch (e) {
       console.warn('System logs SSE unavailable', e);

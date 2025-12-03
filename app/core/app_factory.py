@@ -75,8 +75,14 @@ def create_app():
 
     # Initialize managers
     session_manager = SessionManager()
+    logger.info("[APP_FACTORY] SessionManager initialized")
+
     email_handler = EmailHandler()
+    logger.info("[APP_FACTORY] EmailHandler initialized")
+
     command_queue = CommandQueue()
+    logger.info(f"[APP_FACTORY] ✅ CommandQueue initialized: {type(command_queue)}")
+
     broker_manager = BrokerDataManager()
     balance_manager = AccountBalanceManager()
     symbol_mapper = SymbolMapper()
@@ -132,12 +138,14 @@ def create_app():
     # Helper function for recording trades (used by webhook)
     from app.trades import record_and_broadcast
 
+    logger.info(f"[APP_FACTORY] Creating WebhookService with command_queue: {type(command_queue)}")
     webhook_service = WebhookService(
         session_manager=session_manager,
         command_queue=command_queue,
         record_and_broadcast_fn=record_and_broadcast,
         logger_instance=logger
     )
+    logger.info("[APP_FACTORY] ✅ WebhookService initialized with command_queue")
 
     settings_service = SettingsService()
 

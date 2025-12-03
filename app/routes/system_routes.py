@@ -121,6 +121,42 @@ def sse_system_logs():
     return Response(stream_with_context(gen()), headers=headers)
 
 
+# ✅ Add this function for SSE broadcasting
+def broadcast_to_sse_clients(data: dict, event_type: str = 'message'):
+    """
+    Broadcast event to all connected SSE clients
+
+    Args:
+        data: Data to broadcast (will be JSON serialized)
+        event_type: SSE event type
+    """
+    try:
+        message = f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+
+        # Broadcast to all system log SSE clients via the service
+        if system_logs_service:
+            with system_logs_service.sse_lock:
+                dead_clients = []
+
+                for client_queue in system_logs_service.sse_clients:
+                    try:
+                        client_queue.put_nowait(message)
+                    except:
+                        dead_clients.append(client_queue)
+
+                # Remove dead clients
+                for dead in dead_clients:
+                    try:
+                        system_logs_service.sse_clients.remove(dead)
+                    except:
+                        pass
+
+                logger.debug(f"[SSE_BROADCAST] Sent {event_type} to {len(system_logs_service.sse_clients)} client(s)")
+
+    except Exception as e:
+        logger.error(f"[SSE_BROADCAST_ERROR] {e}")
+
+
 # =================== Health & Stats ===================
 
 @system_bp.route('/health', methods=['GET', 'HEAD'])
