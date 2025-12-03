@@ -95,6 +95,15 @@ def check_balance_update_needed(account):
         # Check if data is stale (older than cache_expiry_seconds)
         import time
         timestamp = balance_info.get('timestamp', 0)
+
+        # Convert timestamp to float if it's a string
+        if isinstance(timestamp, str):
+            try:
+                timestamp = float(timestamp)
+            except (ValueError, TypeError):
+                logger.error(f"[BALANCE_CHECK] Invalid timestamp format for {account}: {timestamp}")
+                return jsonify({'need_update': True, 'reason': 'Invalid timestamp'}), 200
+
         age_seconds = time.time() - timestamp
         need_update = age_seconds > balance_manager.cache_expiry_seconds
 
