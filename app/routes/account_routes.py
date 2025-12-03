@@ -577,10 +577,21 @@ def get_symbol_mappings_api(account):
 
         mappings = session_manager.get_symbol_mappings(account)
 
+        # Convert list to dict if needed (frontend expects dict format)
+        if isinstance(mappings, list):
+            mapping_dict = {}
+            for item in mappings:
+                if isinstance(item, dict):
+                    from_sym = item.get('from', '')
+                    to_sym = item.get('to', '')
+                    if from_sym and to_sym:
+                        mapping_dict[from_sym] = to_sym
+            mappings = mapping_dict
+
         return jsonify({
             'success': True,
             'account': account,
-            'mappings': mappings,
+            'mappings': mappings or {},
             'count': len(mappings) if mappings else 0
         }), 200
 
