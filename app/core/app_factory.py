@@ -159,6 +159,7 @@ def create_app():
     from app.routes.settings_routes import settings_bp, init_settings_routes
     from app.routes.system_routes import system_bp, init_system_routes, register_error_handlers
     from app.routes.broker_balance_routes import broker_balance_bp, init_broker_balance_routes
+    from app.routes.command_routes import command_bp, init_command_routes
 
     # Import EA API routes
     from app.routes.ea_api_routes import ea_api_bp, init_ea_api_routes
@@ -224,9 +225,16 @@ def create_app():
         lim=limiter
     )
 
-    # Initialize EA API routes
-    init_ea_api_routes(
+    # Initialize command routes
+    init_command_routes(
         cq=command_queue,
+        sm=session_manager,
+        lim=limiter,
+        ss=settings_service
+    )
+
+    # Initialize EA API routes (heartbeat and balance only)
+    init_ea_api_routes(
         bm=balance_manager,
         sm=session_manager,
         lim=limiter
@@ -241,6 +249,7 @@ def create_app():
     app.register_blueprint(settings_bp)
     app.register_blueprint(system_bp)
     app.register_blueprint(broker_balance_bp)
+    app.register_blueprint(command_bp)
     app.register_blueprint(ea_api_bp)
     app.register_blueprint(trades_bp)
 
