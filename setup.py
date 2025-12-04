@@ -244,30 +244,39 @@ class SetupWizard:
         oauth_grid = ttk.Frame(step4_frame)
         oauth_grid.pack(fill=tk.X)
 
-        # Google Client ID
-        tk.Label(oauth_grid, text="Google Client ID:",
+        # Google Client ID (REQUIRED)
+        tk.Label(oauth_grid, text="Google Client ID: *",
                 font=("Segoe UI", 9, "bold"),
-                bg=self.bg_dark, fg=self.fg_primary).grid(row=0, column=0, sticky=tk.W, pady=8)
+                bg=self.bg_dark, fg=self.accent_red).grid(row=0, column=0, sticky=tk.W, pady=8)
         google_id_entry = ttk.Entry(oauth_grid, textvariable=self.google_client_id, width=50)
         google_id_entry.grid(row=0, column=1, pady=8, padx=(15, 0), sticky=tk.EW)
 
-        # Google Client Secret
-        tk.Label(oauth_grid, text="Google Client Secret:",
+        # Google Client Secret (REQUIRED)
+        tk.Label(oauth_grid, text="Google Client Secret: *",
                 font=("Segoe UI", 9, "bold"),
-                bg=self.bg_dark, fg=self.fg_primary).grid(row=1, column=0, sticky=tk.W, pady=8)
+                bg=self.bg_dark, fg=self.accent_red).grid(row=1, column=0, sticky=tk.W, pady=8)
         google_secret_entry = ttk.Entry(oauth_grid, textvariable=self.google_client_secret, show="●", width=50)
         google_secret_entry.grid(row=1, column=1, pady=8, padx=(15, 0), sticky=tk.EW)
 
-        # Admin Email
-        tk.Label(oauth_grid, text="Admin Email:",
+        # Google Redirect URI (REQUIRED)
+        tk.Label(oauth_grid, text="Google Redirect URI: *",
                 font=("Segoe UI", 9, "bold"),
-                bg=self.bg_dark, fg=self.fg_primary).grid(row=2, column=0, sticky=tk.W, pady=8)
-        admin_email_entry = ttk.Entry(oauth_grid, textvariable=self.admin_email, width=50)
-        admin_email_entry.grid(row=2, column=1, pady=8, padx=(15, 0), sticky=tk.EW)
+                bg=self.bg_dark, fg=self.accent_red).grid(row=2, column=0, sticky=tk.W, pady=8)
+        google_redirect_var = tk.StringVar(value=f"{self.external_base_url.get()}/auth/google/callback")
+        google_redirect_entry = ttk.Entry(oauth_grid, textvariable=google_redirect_var, width=50)
+        google_redirect_entry.grid(row=2, column=1, pady=8, padx=(15, 0), sticky=tk.EW)
+        self.google_redirect_uri = google_redirect_var
 
-        tk.Label(oauth_grid, text="(Optional - Leave blank to configure later)",
+        # Admin Email (REQUIRED)
+        tk.Label(oauth_grid, text="Admin Email: *",
+                font=("Segoe UI", 9, "bold"),
+                bg=self.bg_dark, fg=self.accent_red).grid(row=3, column=0, sticky=tk.W, pady=8)
+        admin_email_entry = ttk.Entry(oauth_grid, textvariable=self.admin_email, width=50)
+        admin_email_entry.grid(row=3, column=1, pady=8, padx=(15, 0), sticky=tk.EW)
+
+        tk.Label(oauth_grid, text="* = Required for Multi-User SaaS authentication",
                 font=("Segoe UI", 8),
-                bg=self.bg_dark, fg=self.fg_secondary).grid(row=3, column=1, sticky=tk.W, padx=(15, 0))
+                bg=self.bg_dark, fg=self.accent_yellow).grid(row=4, column=0, columnspan=2, sticky=tk.W, padx=(0, 0), pady=(10, 0))
 
         oauth_grid.columnconfigure(1, weight=1)
 
@@ -514,6 +523,36 @@ requests==2.31.0
             messagebox.showwarning("Validation Error", "Please enter server URL")
             return False
 
+        # Google OAuth Credentials are REQUIRED for Multi-User SaaS
+        if not self.google_client_id.get().strip():
+            messagebox.showerror(
+                "Missing Google Credentials",
+                "Google Client ID is required for Multi-User SaaS authentication.\n\n"
+                "Get this from: https://console.cloud.google.com/apis/credentials"
+            )
+            return False
+
+        if not self.google_client_secret.get().strip():
+            messagebox.showerror(
+                "Missing Google Credentials",
+                "Google Client Secret is required for Multi-User SaaS authentication.\n\n"
+                "Get this from: https://console.cloud.google.com/apis/credentials"
+            )
+            return False
+
+        if not self.admin_email.get().strip():
+            messagebox.showerror(
+                "Missing Admin Email",
+                "Admin Email is required.\n\n"
+                "This email will be granted admin privileges on first login."
+            )
+            return False
+
+        # Validate email format (basic check)
+        if "@" not in self.admin_email.get() or "." not in self.admin_email.get():
+            messagebox.showwarning("Validation Error", "Please enter a valid email address for Admin Email")
+            return False
+
         # Basic Auth validation (only if user provides values)
         if self.basic_password.get() and len(self.basic_password.get()) < 6:
             messagebox.showwarning("Validation Error", "If providing a password, it must be at least 6 characters")
@@ -554,11 +593,11 @@ MT5_PROFILE_SOURCE=
 MT5_INSTANCES_DIR=
 """
 
-            # Build Google OAuth section
-            google_section = f"""# Google OAuth (Multi-User SaaS)
+            # Build Google OAuth section (REQUIRED)
+            google_section = f"""# Google OAuth (Multi-User SaaS) - REQUIRED
 GOOGLE_CLIENT_ID={self.google_client_id.get()}
 GOOGLE_CLIENT_SECRET={self.google_client_secret.get()}
-GOOGLE_REDIRECT_URI={self.external_base_url.get()}/auth/google/callback
+GOOGLE_REDIRECT_URI={self.google_redirect_uri.get()}
 ADMIN_EMAIL={self.admin_email.get()}
 """
 
@@ -620,45 +659,26 @@ LOG_FILE=logs/trading_bot.log
             if not os.path.exists("server.py"):
                 self.create_server_file()
             
-            # Build the launch message based on configuration
-            if self.google_client_id.get() and self.google_client_secret.get():
-                # Multi-User SaaS mode
-                launch_msg = (
-                    f"✓ Configuration complete!\n\n"
-                    f"Web Interface: {self.external_base_url.get()}\n\n"
-                    f"🔐 Multi-User Mode Enabled\n"
-                    f"• Users will login via Google OAuth\n"
-                    f"• Each user gets their own webhook URL after login\n"
-                    f"• Admin email: {self.admin_email.get() or '(not set)'}\n\n"
-                    f"Database: {'✓ Migrated' if migration_success else '⚠ Check migrations'}\n\n"
-                    f"Start the server now?"
-                )
-                success_msg = (
-                    f"Server is now running!\n\n"
-                    f"Access: {self.external_base_url.get()}\n\n"
-                    f"🔐 Multi-User SaaS Mode\n"
-                    f"Users should login with Google to get their personal webhook URL.\n\n"
-                    f"Admin: {self.admin_email.get() or 'First user to login'}"
-                )
-            else:
-                # Legacy mode (no Google OAuth configured)
-                # Note: No webhook URL shown - user must configure Google OAuth
-                launch_msg = (
-                    f"✓ Configuration complete!\n\n"
-                    f"Web Interface: {self.external_base_url.get()}\n"
-                    f"Username: {self.basic_user.get()}\n\n"
-                    f"⚠ Legacy Mode (Google OAuth not configured)\n"
-                    f"You can still use Basic Auth to access the dashboard,\n"
-                    f"but webhook functionality requires Google OAuth.\n\n"
-                    f"Start the server now?"
-                )
-                success_msg = (
-                    f"Server is now running!\n\n"
-                    f"Access: {self.external_base_url.get()}\n\n"
-                    f"⚠ Legacy Mode\n"
-                    f"To enable webhooks, configure Google OAuth\n"
-                    f"in the .env file and restart the server."
-                )
+            # Build the launch message - Google OAuth is now required and always enabled
+            launch_msg = (
+                f"✓ Configuration complete!\n\n"
+                f"Web Interface: {self.external_base_url.get()}\n\n"
+                f"🔐 Multi-User SaaS Mode Enabled\n"
+                f"• Users will login via Google OAuth\n"
+                f"• Each user gets their own webhook URL after login\n"
+                f"• Admin email: {self.admin_email.get()}\n"
+                f"• Google OAuth: Configured\n\n"
+                f"Database: {'✓ Migrated' if migration_success else '⚠ Check migrations'}\n\n"
+                f"Start the server now?"
+            )
+            success_msg = (
+                f"Server is now running!\n\n"
+                f"Access: {self.external_base_url.get()}\n\n"
+                f"🔐 Multi-User SaaS Mode\n"
+                f"Users should login with Google to get their personal webhook URL.\n\n"
+                f"Admin: {self.admin_email.get()}\n"
+                f"Redirect URI: {self.google_redirect_uri.get()}"
+            )
 
             result = messagebox.askokcancel("Ready to Launch", launch_msg)
 
