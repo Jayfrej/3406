@@ -348,7 +348,7 @@ class TradingBotUI {
     this.setupSecretAndMappingListeners();
 }
 
- 
+
 
 async loadData() {
     try {
