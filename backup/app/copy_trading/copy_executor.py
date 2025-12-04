@@ -8,16 +8,22 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# Import command_queue สำหรับ API mode
-from app.command_queue import command_queue
-
 
 class CopyExecutor:
     """ส่งคำสั่งการเทรดไปยัง Slave account"""
 
-    def __init__(self, session_manager, copy_history):
+    def __init__(self, session_manager, copy_history, command_queue):
+        """
+        Initialize Copy Executor
+
+        Args:
+            session_manager: SessionManager instance
+            copy_history: CopyHistory instance
+            command_queue: CommandQueue instance for EA communication
+        """
         self.session_manager = session_manager
         self.copy_history = copy_history
+        self.command_queue = command_queue
 
     # ========================= Public API =========================
 
@@ -95,7 +101,7 @@ class CopyExecutor:
         """
         try:
             # ส่งคำสั่งเข้า Command Queue (API Mode เท่านั้น)
-            success = command_queue.add_command(account, command)
+            success = self.command_queue.add_command(account, command)
 
             if success:
                 logger.info(

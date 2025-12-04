@@ -705,21 +705,22 @@ Create your first pair to start copy trading
                 </div>
 <div class="form-group">
 <label for="commandApiRateLimit">Command API Rate Limit</label>
-<input class="form-input" id="commandApiRateLimit" placeholder="60 per minute" type="text"/>
+<input class="form-input" id="commandApiRateLimit" placeholder="200 per minute" type="text"/>
 <small class="form-hint">
-                    Format: <code>number per (minute|hour|day)</code>
+                    Format: <code>number per (minute|hour|day)</code> or <code>exempt</code><br/>
+                    <strong>Note:</strong> EA polls every 1 second (60 requests/minute per EA)
 </small>
 </div>
 <div class="rate-limit-examples">
 <strong>Examples:</strong>
-<button class="btn-example" onclick="document.getElementById('commandApiRateLimit').value='60 per minute'">
-                    60 per minute
+<button class="btn-example" onclick="document.getElementById('commandApiRateLimit').value='200 per minute'">
+                    200 per minute
                   </button>
-<button class="btn-example" onclick="document.getElementById('commandApiRateLimit').value='120 per minute'">
-                    120 per minute
+<button class="btn-example" onclick="document.getElementById('commandApiRateLimit').value='500 per minute'">
+                    500 per minute
                   </button>
-<button class="btn-example" onclick="document.getElementById('commandApiRateLimit').value='1000 per hour'">
-                    1000 per hour
+<button class="btn-example" onclick="document.getElementById('commandApiRateLimit').value='exempt'">
+                    Unlimited (Exempt)
                   </button>
 </div>
 </div>
