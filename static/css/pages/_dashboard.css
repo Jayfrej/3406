@@ -1,0 +1,168 @@
+/* ============================================
+   PAGES: Dashboard
+   ============================================
+   Dashboard-specific styles including
+   system info and usage stats.
+   ============================================ */
+
+/* =================== System Info =================== */
+
+.system-info {
+  display: grid;
+  gap: 12px;
+}
+
+.info-item {
+  display: grid;
+  grid-template-columns: max-content 1fr max-content;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.info-item strong {
+  min-width: 180px;
+}
+
+.info-item code {
+  background: #0a0f16;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  width: 100%;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--text);
+}
+
+.info-item .btn-copy {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+}
+
+/* Server Status row - place badge on right */
+.system-info .info-item:first-child {
+  display: grid !important;
+  grid-template-columns: max-content 1fr max-content !important;
+  align-items: center;
+  gap: 10px;
+}
+
+.system-info .info-item:first-child .status-badge,
+.system-info .info-item:first-child #serverStatusSystem {
+  width: auto !important;
+  max-width: max-content !important;
+  justify-self: end !important;
+}
+
+/* =================== Usage Stats Section =================== */
+
+.usage-stats-section {
+  padding: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.usage-stats-section:last-child {
+  margin-bottom: 0;
+}
+
+.usage-stats-title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text);
+  margin-bottom: 16px;
+}
+
+.usage-stat-item {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: var(--transition);
+}
+
+.usage-stat-item:hover {
+  background: var(--surface);
+  transform: translateY(-1px);
+}
+
+.usage-stat-icon {
+  font-size: var(--font-size-2xl);
+  color: var(--color-primary);
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.usage-stat-icon.online-icon {
+  color: var(--color-success);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.usage-stat-icon.offline-icon {
+  color: var(--color-danger);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.usage-stat-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.usage-stat-number {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text);
+  line-height: var(--line-height-tight);
+}
+
+.usage-stat-label {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-top: 2px;
+}
+
+/* =================== Responsive =================== */
+
+@media (max-width: 640px) {
+  .system-info .info-item {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .system-info .info-item strong {
+    min-width: 0;
+  }
+
+  .system-info .info-item .btn-copy {
+    justify-self: start;
+  }
+}
+

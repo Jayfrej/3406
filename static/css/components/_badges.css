@@ -1,0 +1,312 @@
+/* ============================================
+   COMPONENTS: Badges
+   ============================================
+   Status badges, action badges, and labels.
+   ============================================ */
+
+/* Generic Badge */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1;
+  border-radius: var(--border-radius-full);
+  white-space: nowrap;
+}
+
+/* =================== Status Dot (JS dynamic class) =================== */
+
+.status-dot {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.78rem;
+  font-weight: var(--font-weight-bold);
+}
+
+.status-dot.online {
+  background: var(--status-online-bg);
+  color: var(--color-success);
+}
+
+.status-dot.offline {
+  background: var(--status-offline-bg);
+  color: var(--color-danger);
+}
+
+/* =================== Status Badges =================== */
+
+.status-badge {
+  padding: 6px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.78rem;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.3px;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-badge.online {
+  background: var(--status-online-bg);
+  color: var(--color-success);
+  border-color: var(--status-online-border);
+}
+
+.status-badge.online i {
+  color: var(--color-success);
+}
+
+.status-badge.offline {
+  background: var(--status-offline-bg);
+  color: var(--color-danger);
+  border-color: var(--status-offline-border);
+}
+
+.status-badge.offline i {
+  color: var(--color-danger);
+}
+
+.status-badge.loading {
+  background: var(--status-loading-bg);
+  color: var(--color-warning);
+  border-color: var(--status-loading-border);
+}
+
+.status-badge.loading i {
+  color: var(--color-warning);
+}
+
+.status-badge.pause {
+  background: var(--status-pause-bg);
+  color: #eab308;
+  border-color: var(--status-pause-border);
+}
+
+.status-badge.success {
+  background: var(--status-online-bg);
+  color: var(--color-success);
+  border: 1px solid var(--status-online-border);
+}
+
+.status-badge.error {
+  background: var(--status-offline-bg);
+  color: var(--color-danger);
+  border: 1px solid var(--status-offline-border);
+}
+
+.status-badge.wait-for-activate {
+  background: var(--status-loading-bg);
+  color: var(--color-warning);
+  border: 1px solid var(--status-loading-border);
+}
+
+.status-badge.wait-for-activate i {
+  color: var(--color-warning);
+  animation: pulse 2s infinite;
+}
+
+/* =================== Action Badges =================== */
+
+.action-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  min-width: 60px;
+  text-align: center;
+  color: #ffffff !important;
+  background: var(--color-secondary);
+}
+
+.action-badge.buy {
+  background-color: var(--color-success);
+}
+
+.action-badge.sell {
+  background-color: var(--color-danger);
+}
+
+.action-badge.close {
+  background-color: var(--color-warning);
+  color: #000000 !important;
+}
+
+.action-badge.modify {
+  background-color: var(--color-primary);
+}
+
+.action-badge.long {
+  background-color: #20c997;
+}
+
+.action-badge.short {
+  background-color: #fd7e14;
+}
+
+.action-badge.call {
+  background-color: #007bff;
+}
+
+.action-badge.put {
+  background-color: #6f42c1;
+}
+
+.action-badge.close_all,
+.action-badge.close-all {
+  background-color: var(--color-secondary);
+}
+
+.action-badge.close_symbol,
+.action-badge.close-symbol {
+  background-color: #795548;
+}
+
+.action-badge.default {
+  background-color: #e9ecef;
+  color: #495057 !important;
+}
+
+/* Pending Order Action Badges */
+.action-badge.buy_stop,
+.action-badge.buy-stop,
+.action-badge.sell_stop,
+.action-badge.sell-stop {
+  background-color: var(--color-secondary);
+}
+
+.action-badge.buy_limit,
+.action-badge.buy-limit,
+.action-badge.sell_limit,
+.action-badge.sell-limit {
+  background-color: #5a6268;
+}
+
+/* Hover effect */
+.action-badge:hover {
+  opacity: 0.8;
+  transform: scale(1.05);
+  transition: all 0.2s ease;
+}
+
+/* Pending orders hover */
+.action-badge.buy_stop:hover,
+.action-badge.sell_stop:hover,
+.action-badge.buy_limit:hover,
+.action-badge.sell_limit:hover,
+.action-badge.buy-stop:hover,
+.action-badge.sell-stop:hover,
+.action-badge.buy-limit:hover,
+.action-badge.sell-limit:hover {
+  opacity: 0.85;
+  box-shadow: 0 2px 8px rgba(108, 117, 125, 0.4);
+}
+
+/* Volume Mode Badge */
+.volume-mode-badge {
+  display: inline-block;
+  padding: 6px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text);
+  text-transform: capitalize;
+}
+
+/* =================== Dark Theme Enhancements =================== */
+
+@media (prefers-color-scheme: dark) {
+  .action-badge.buy {
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.3);
+  }
+
+  .action-badge.sell {
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+  }
+
+  .action-badge.close {
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+  }
+}
+
+/* =================== Log Badges =================== */
+
+.log-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.5px;
+  min-width: 70px;
+  text-align: center;
+}
+
+.log-badge-info {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--color-primary);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.log-badge-success {
+  background: var(--status-online-bg);
+  color: var(--color-success);
+  border: 1px solid var(--status-online-border);
+}
+
+.log-badge-warning {
+  background: var(--status-loading-bg);
+  color: var(--color-warning);
+  border: 1px solid var(--status-loading-border);
+}
+
+.log-badge-error {
+  background: var(--status-offline-bg);
+  color: var(--color-danger);
+  border: 1px solid var(--status-offline-border);
+}
+
+/* Ensure badge status classes exist for dynamic Jinja2 templates */
+
+.badge-success,
+.status-filled,
+.status-completed {
+  background-color: var(--color-success-light);
+  color: var(--color-success);
+}
+
+.badge-danger,
+.status-cancelled,
+.status-rejected {
+  background-color: var(--color-danger-light);
+  color: var(--color-danger);
+}
+
+.badge-warning,
+.status-pending,
+.status-processing {
+  background-color: var(--color-warning-light);
+  color: var(--color-warning);
+}
+
+.badge-info,
+.status-open,
+.status-active {
+  background-color: var(--color-info-light);
+  color: var(--color-info);
+}
+
+/* Neutral Badge */
+.badge-secondary,
+.status-unknown {
+  background-color: var(--color-gray-200);
+  color: var(--color-gray-700);
+}

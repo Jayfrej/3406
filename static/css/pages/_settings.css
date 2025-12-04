@@ -1,0 +1,372 @@
+/* ============================================
+   PAGES: Settings
+   ============================================
+   Settings page including rate limit,
+   email configuration, and advanced settings.
+   ============================================ */
+
+/* =================== Settings Sections =================== */
+
+.settings-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.settings-section {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.settings-section .section-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text);
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--color-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-section .form-group {
+  margin-bottom: 16px;
+}
+
+/* =================== Settings Info Box =================== */
+
+.settings-info-box {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 24px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.settings-info-box.warning {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.settings-info-box i {
+  font-size: var(--font-size-2xl);
+  color: var(--color-primary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.settings-info-box.warning i {
+  color: var(--color-warning);
+}
+
+.settings-info-box div {
+  flex: 1;
+}
+
+.settings-info-box strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+
+.settings-info-box code {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+/* =================== Rate Limit Examples =================== */
+
+.rate-limit-examples {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.rate-limit-examples strong {
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  margin-right: 4px;
+}
+
+/* =================== Current Config =================== */
+
+.current-config {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.config-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.config-item strong {
+  color: var(--text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.config-item code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  color: var(--text);
+  font-size: 0.9em;
+}
+
+/* =================== Settings Actions =================== */
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+/* =================== Advanced Settings =================== */
+
+.advanced-settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.advanced-setting-item {
+  padding: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.advanced-setting-item strong {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.advanced-setting-item code {
+  display: block;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  color: var(--text);
+  margin-bottom: 8px;
+  overflow-x: auto;
+}
+
+.advanced-setting-item small {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--text-dim);
+}
+
+/* =================== Email Config Section =================== */
+
+.email-config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 24px;
+}
+
+/* =================== SMTP Info Items =================== */
+
+.smtp-info-item {
+  padding: 12px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.smtp-info-item strong {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.smtp-info-item code {
+  display: block;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  color: var(--text);
+  font-size: 0.9em;
+}
+
+/* =================== Test Email Section =================== */
+
+.test-email-section {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(147, 51, 234, 0.1) 100%);
+  border: 2px dashed var(--color-primary);
+}
+
+.test-email-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.test-email-content p {
+  flex: 1;
+  margin: 0;
+  color: var(--text);
+}
+
+.test-email-result {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 10px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.test-email-result.success {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: var(--color-success);
+}
+
+.test-email-result.error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--color-danger);
+}
+
+.test-email-result i {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.test-email-result div {
+  flex: 1;
+}
+
+.test-email-result strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+
+.test-email-result p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+/* =================== Modify Sections =================== */
+
+.modify-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0 !important;
+}
+
+.modify-section {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modify-section-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.modify-section-header > i {
+  font-size: 1.3rem;
+  color: var(--color-primary);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.modify-section-title {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.modify-section-title span {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text);
+}
+
+.modify-section-title small {
+  font-size: var(--font-size-sm);
+  color: var(--text-dim);
+  font-weight: var(--font-weight-normal);
+}
+
+.section-divider {
+  border-bottom: 1px solid #3a4555;
+  margin: 24px 0;
+}
+
+/* =================== Responsive =================== */
+
+@media (max-width: 768px) {
+  .rate-limit-examples {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .config-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .settings-actions {
+    flex-direction: column;
+  }
+
+  .settings-actions .btn {
+    width: 100%;
+  }
+
+  .test-email-content {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .test-email-content .btn {
+    width: 100%;
+  }
+
+  .modify-section-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+

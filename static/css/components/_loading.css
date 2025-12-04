@@ -1,0 +1,35 @@
+/* ============================================
+   COMPONENTS: Loading States
+   ============================================
+   Loading overlays and spinners.
+   ============================================ */
+
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: none;
+  place-items: center;
+  z-index: var(--z-loading);
+}
+
+.loading-overlay.show {
+  display: grid;
+}
+
+.loading-spinner {
+  background: var(--surface);
+  padding: 32px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  text-align: center;
+}
+
+.loading-spinner i {
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+  display: block;
+}
+

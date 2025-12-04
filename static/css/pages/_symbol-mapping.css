@@ -1,0 +1,170 @@
+/* ============================================
+   PAGES: Symbol Mapping
+   ============================================
+   Symbol mapping list and item styles.
+   ============================================ */
+
+/* =================== Symbol Mapping Empty State =================== */
+
+.symbol-mapping-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.symbol-mapping-empty i {
+  font-size: 4.5rem;
+  margin-bottom: 20px;
+  opacity: 0.3;
+}
+
+.symbol-mapping-empty p {
+  margin: 0;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-normal);
+}
+
+/* =================== Symbol Mapping List =================== */
+
+.symbol-mapping-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.symbol-mapping-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: var(--transition);
+}
+
+.symbol-mapping-item:hover {
+  background: var(--surface-3);
+  border-color: var(--color-primary);
+  transform: translateX(4px);
+}
+
+.symbol-mapping-pair {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+}
+
+.symbol-mapping-from,
+.symbol-mapping-to {
+  font-family: var(--font-mono-alt);
+  font-size: 0.95rem;
+  padding: 8px 14px;
+  background: var(--surface-3);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.5px;
+  border: 1px solid var(--border);
+}
+
+.symbol-mapping-from {
+  color: var(--color-warning);
+}
+
+.symbol-mapping-to {
+  color: var(--color-success);
+}
+
+.symbol-mapping-arrow {
+  color: var(--color-primary);
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+/* =================== Symbol Map Items (Modal) =================== */
+
+.symbol-map-item {
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 15px;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid var(--border);
+  transition: all 0.2s ease;
+}
+
+.symbol-map-item:hover {
+  border-color: var(--color-primary);
+  transform: translateX(5px);
+}
+
+.symbol-map-pair {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex: 1;
+}
+
+.symbol-map-from,
+.symbol-map-to {
+  font-family: var(--font-mono-alt);
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-lg);
+}
+
+.symbol-map-from {
+  color: var(--color-primary);
+}
+
+.symbol-map-to {
+  color: var(--color-success);
+}
+
+.symbol-map-arrow {
+  color: var(--text-dim);
+  font-size: 1.2rem;
+}
+
+.symbol-map-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* =================== Responsive =================== */
+
+@media (max-width: 768px) {
+  .symbol-mapping-item {
+    padding: 12px 14px;
+  }
+
+  .symbol-mapping-pair {
+    gap: 10px;
+  }
+
+  .symbol-mapping-from,
+  .symbol-mapping-to {
+    font-size: var(--font-size-sm);
+    padding: 6px 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .symbol-mapping-pair {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .symbol-mapping-arrow {
+    transform: rotate(90deg);
+  }
+}
+

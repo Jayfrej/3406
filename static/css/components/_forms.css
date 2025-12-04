@@ -1,0 +1,440 @@
+/* ============================================
+   COMPONENTS: Forms
+   ============================================
+   Form elements including inputs, selects,
+   toggle switches (de-duplicated), and labels.
+   ============================================ */
+
+/* Form Group */
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  margin-bottom: 8px;
+  color: var(--text);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Form Inputs */
+.form-input,
+.search-input {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  transition: var(--transition);
+  font-size: var(--font-size-base);
+}
+
+.form-input:focus,
+.search-input:focus {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-color: var(--color-primary);
+}
+
+.search-input {
+  width: 260px;
+}
+
+/* Form Hints */
+.form-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--font-size-sm);
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.form-hint code {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+/* Required Field Indicator */
+.required {
+  color: var(--color-danger);
+}
+
+/* Input Groups */
+.url-input-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.url-input-group .form-input {
+  flex: 1;
+}
+
+.input-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.input-group .form-input,
+.input-group .form-control {
+  flex: 1;
+}
+
+.password-input-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.password-input-group .form-input {
+  flex: 1;
+}
+
+.token-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.token-input-group .form-input {
+  flex: 1;
+  font-size: 0.9rem;
+  background: var(--surface-3);
+}
+
+.mapping-input-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mapping-input-group input {
+  flex: 1;
+}
+
+.mapping-input-group-simple {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mapping-input-group-simple .form-input {
+  flex: 1;
+}
+
+/* Mapping Arrow */
+.mapping-arrow {
+  font-size: 20px;
+  font-weight: bold;
+  color: var(--color-primary);
+  line-height: 1;
+  user-select: none;
+  display: flex;
+  align-items: center;
+}
+
+/* Add Form Vertical */
+.add-form-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ============================================
+   TOGGLE SWITCH - SINGLE DEFINITION
+   (De-duplicated from original ~3 definitions)
+   ============================================ */
+
+/* Standard Toggle Switch */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 56px;
+  height: 30px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #475569;
+  transition: 0.3s;
+  border-radius: 30px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 22px;
+  width: 22px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: var(--color-primary);
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(26px);
+}
+
+.toggle-label {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Small Toggle Switch */
+.toggle-switch-small {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.toggle-switch-small input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider-small {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--surface-3);
+  border: 1px solid var(--border);
+  transition: var(--transition);
+  border-radius: 18px;
+}
+
+.toggle-slider-small:before {
+  position: absolute;
+  content: "";
+  height: 12px;
+  width: 12px;
+  left: 3px;
+  bottom: 2px;
+  background-color: var(--text-dim);
+  transition: var(--transition);
+  border-radius: 50%;
+}
+
+.toggle-switch-small input:checked + .toggle-slider-small {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.toggle-switch-small input:checked + .toggle-slider-small:before {
+  transform: translateX(18px);
+  background-color: #fff;
+}
+
+.toggle-switch-small input:disabled + .toggle-slider-small {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Email Toggle Group */
+.email-toggle-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: var(--surface);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+/* Account Selection Items */
+.account-selection-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.account-selection-item {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  transition: var(--transition);
+}
+
+.account-selection-item:hover {
+  background: var(--surface-3);
+  border-color: var(--color-primary);
+}
+
+.account-selection-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  width: 100%;
+}
+
+.account-checkbox,
+.webhook-account-checkbox {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.account-selection-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.account-selection-number {
+  font-weight: var(--font-weight-bold);
+  color: var(--text);
+  font-size: var(--font-size-base);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-selection-details {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.account-selection-nickname {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+/* Recipients Tags */
+.recipients-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  min-height: 48px;
+}
+
+.recipient-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-primary);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.recipient-tag i {
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+/* Provider Buttons Container */
+.provider-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.provider-buttons strong {
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  margin-right: 8px;
+}
+
+/* =================== Responsive =================== */
+
+@media (max-width: 768px) {
+  .search-input {
+    width: 100%;
+  }
+
+  .email-toggle-group {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .password-input-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .mapping-input-group {
+    flex-wrap: wrap;
+  }
+
+  .mapping-input-group-simple {
+    flex-wrap: wrap;
+  }
+
+  .mapping-arrow {
+    display: none;
+  }
+
+  .provider-buttons {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .provider-buttons strong {
+    margin-bottom: 8px;
+  }
+
+  .input-group {
+    flex-direction: column;
+  }
+
+  .input-group .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .recipients-tags {
+    flex-direction: column;
+  }
+
+  .recipient-tag {
+    width: 100%;
+    justify-content: center;
+  }
+}
+

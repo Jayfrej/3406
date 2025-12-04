@@ -1,0 +1,15 @@
+/* ============================================
+   PAGES: History
+   ============================================
+   History page specific styles including
+   table column visibility.
+   ============================================ */
+
+/* =================== Table Column Visibility =================== */
+
+/* Ensure history table 'VOLUME' column remains visible */
+#page-history .accounts-table thead tr th:nth-child(6),
+#page-history .accounts-table tbody tr td:nth-child(6) {
+  display: table-cell !important;
+}
+

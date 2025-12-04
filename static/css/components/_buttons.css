@@ -1,0 +1,295 @@
+/* ============================================
+   COMPONENTS: Buttons
+   ============================================
+   All button styles and variants.
+   ============================================ */
+
+/* Base Button */
+.btn {
+  padding: 11px 16px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: var(--transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-weight: var(--font-weight-semibold);
+  font-size: 0.95rem;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+/* Color Variants */
+.btn-primary {
+  background: var(--color-primary);
+}
+
+.btn-secondary {
+  background: var(--color-secondary);
+}
+
+.btn-success {
+  background: var(--color-success);
+  color: #fff;
+}
+
+.btn-danger {
+  background: var(--color-danger);
+}
+
+.btn-warning {
+  background: var(--color-warning);
+  color: #0b0b0b;
+}
+
+.btn-info {
+  background: var(--color-info);
+  color: #fff;
+}
+
+/* Size Variants */
+.btn-sm {
+  padding: 8px 12px;
+  font-size: var(--font-size-sm);
+}
+
+/* Full Width */
+.btn-full {
+  width: 100%;
+}
+
+/* Icon-only Button */
+.btn-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius);
+  padding: 0;
+  justify-content: center;
+}
+
+.btn-icon i {
+  font-size: var(--font-size-lg);
+}
+
+/* Icon-only Small */
+.btn-icon-only {
+  padding: 11px 14px;
+  min-width: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-icon-only i {
+  margin: 0;
+}
+
+/* Icon Small Button */
+.btn-icon-small {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: var(--transition);
+}
+
+.btn-icon-small:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
+/* Copy Button */
+.btn-copy {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  padding: 8px;
+  border-radius: var(--radius-sm);
+}
+
+.btn-copy:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+/* Example Button */
+.btn-example {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn-example:hover {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+/* Provider Buttons */
+.btn-provider {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-provider:hover {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+}
+
+.btn-provider.gmail:hover {
+  background: #ea4335;
+  border-color: #ea4335;
+}
+
+.btn-provider.outlook:hover {
+  background: #0078d4;
+  border-color: #0078d4;
+}
+
+.btn-provider.yahoo:hover {
+  background: #6001d2;
+  border-color: #6001d2;
+}
+
+/* Icon Toggle Button */
+.btn-icon-toggle {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+}
+
+.btn-icon-toggle:hover {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+/* Button Groups */
+.account-button-group {
+  display: flex;
+  gap: 10px;
+}
+
+.account-button-group .btn {
+  flex: 1;
+}
+
+.copy-button-group {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.copy-button-group .btn {
+  white-space: nowrap;
+}
+
+.button-group {
+  display: flex;
+  gap: 10px;
+}
+
+.button-group .btn {
+  flex: 1;
+}
+
+.button-group-horizontal {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* Action Buttons Container */
+.action-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+/* =================== Responsive =================== */
+
+@media (max-width: 768px) {
+  .account-button-group {
+    flex-direction: column;
+  }
+
+  .account-button-group .btn {
+    width: 100%;
+  }
+
+  .copy-button-group {
+    flex-direction: column;
+  }
+
+  .button-group-horizontal {
+    grid-template-columns: 1fr;
+  }
+
+  .btn-icon-only {
+    width: 100%;
+  }
+
+  .btn-icon-toggle {
+    width: 100%;
+  }
+
+  .btn-provider {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .btn-example {
+    width: 100%;
+  }
+
+  .symbol-mapping-grid button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .button-group {
+    flex-direction: column;
+  }
+
+  .button-group .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .action-buttons {
+    flex-direction: column;
+  }
+}
+

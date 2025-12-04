@@ -1,0 +1,37 @@
+/* ============================================
+   COMPONENTS: Custom Scrollbar
+   ============================================
+   Custom scrollbar styling for webkit browsers.
+   ============================================ */
+
+/* Plans List, History Scroll, Accounts List */
+.plans-list::-webkit-scrollbar,
+.history-scroll::-webkit-scrollbar,
+.accounts-list::-webkit-scrollbar,
+.log-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.plans-list::-webkit-scrollbar-track,
+.history-scroll::-webkit-scrollbar-track,
+.accounts-list::-webkit-scrollbar-track,
+.log-content::-webkit-scrollbar-track {
+  background: var(--surface-2);
+  border-radius: 10px;
+}
+
+.plans-list::-webkit-scrollbar-thumb,
+.history-scroll::-webkit-scrollbar-thumb,
+.accounts-list::-webkit-scrollbar-thumb,
+.log-content::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 10px;
+}
+
+.plans-list::-webkit-scrollbar-thumb:hover,
+.history-scroll::-webkit-scrollbar-thumb:hover,
+.accounts-list::-webkit-scrollbar-thumb:hover,
+.log-content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}
+

@@ -1,0 +1,202 @@
+/* ============================================
+   COMPONENTS: Cards
+   ============================================
+   Card containers and variants.
+   ============================================ */
+
+/* Base Card */
+.card {
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+
+.card-header {
+  background: var(--surface);
+  color: var(--text);
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.card-header h3 {
+  font-size: var(--font-size-lg);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.card-header .btn {
+  margin-left: auto;
+}
+
+.card-body {
+  padding: 20px;
+}
+
+/* Stat Card */
+.stat-card {
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 22px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid var(--border);
+  transition: var(--transition);
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+}
+
+.stat-icon {
+  font-size: 2rem;
+  color: var(--color-primary);
+  width: 48px;
+  min-width: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+/* Solid dots for online/offline stat icons */
+.stat-icon.online,
+.stat-icon.offline {
+  position: relative;
+  font-size: 0;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-radius: 50%;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  line-height: 0;
+}
+
+.stat-icon.online::before,
+.stat-icon.offline::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.stat-icon.online {
+  color: var(--color-success);
+}
+
+.stat-icon.offline {
+  color: var(--color-danger);
+}
+
+.stat-number {
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+}
+
+.stat-label {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* Account Card */
+.account-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  transition: var(--transition);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.account-card:hover {
+  background: var(--surface-3);
+  transform: translateX(2px);
+  box-shadow: var(--shadow);
+}
+
+.account-card-info {
+  flex: 1;
+}
+
+.account-card-number {
+  font-weight: var(--font-weight-bold);
+  color: var(--text);
+  font-size: var(--font-size-base);
+  margin-bottom: 4px;
+}
+
+.account-card-nickname {
+  color: var(--text-dim);
+  font-size: var(--font-size-sm);
+}
+
+.account-card-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Copy Pair Card */
+.copy-pair-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  transition: var(--transition);
+}
+
+.copy-pair-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+/* Plan Item Card */
+.plan-item-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  transition: var(--transition);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.plan-item-card:hover {
+  background: var(--surface-3);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.plan-card {
+  transition: all 0.3s ease;
+}
+
+/* =================== Responsive =================== */
+
+@media (max-width: 480px) {
+  .stat-card {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+

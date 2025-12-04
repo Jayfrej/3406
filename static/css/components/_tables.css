@@ -1,0 +1,266 @@
+/* ============================================
+   COMPONENTS: Tables
+   ============================================
+   Table styles and containers.
+   ============================================ */
+
+/* Table Container */
+.table-container {
+  overflow-x: auto;
+}
+
+.history-scroll {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+/* Accounts Table */
+.accounts-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.accounts-table th,
+.accounts-table td {
+  padding: 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.accounts-table th {
+  background: var(--surface-3);
+  text-transform: uppercase;
+  font-size: 0.82rem;
+  letter-spacing: 0.4px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.accounts-table tbody tr {
+  transition: var(--transition);
+}
+
+.accounts-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* First row animation for new items */
+.accounts-table tbody tr:first-child {
+  animation: fadeInSlide 0.3s ease-out;
+}
+
+/* No Data Message */
+.no-data-message {
+  padding: 36px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.no-data-message i {
+  font-size: 2.6rem;
+  margin-bottom: 12px;
+  color: #475569;
+  display: block;
+}
+
+.no-data-message p {
+  margin: 0;
+}
+
+/* Table Actions */
+.table-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Pair Table Cell */
+.pair-table-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.pair-table-master,
+.pair-table-slave {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.pair-table-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.pair-table-arrow {
+  font-size: 1.2rem;
+  color: var(--color-primary);
+}
+
+/* API Token Cell */
+.api-token-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 250px;
+}
+
+.api-token-cell code {
+  flex: 1;
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: var(--text);
+  background: var(--surface-2);
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* =================== History Table Specific Styles =================== */
+
+/* Copy Trading History - Consistent Font Size */
+#copyHistoryTableBody td {
+  font-size: 0.95rem !important;
+  line-height: 1.5 !important;
+}
+
+#copyHistoryTableBody .error-message {
+  color: var(--color-danger);
+  font-size: 0.95rem !important;
+}
+
+/* Trading History - Error Message Styling */
+#historyTableBody td {
+  font-size: 0.95rem !important;
+  line-height: 1.5 !important;
+}
+
+#historyTableBody .error-message {
+  color: var(--color-danger) !important;
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ============================================
+   COMPONENTS: Tables
+   ============================================ */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.table th,
+.table td {
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: left;
+  border-bottom: 1px solid var(--table-border-color);
+}
+
+.table th {
+  background-color: var(--table-header-bg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.table tbody tr:hover {
+  background-color: var(--table-row-hover);
+}
+
+/* Striped Table */
+.table-striped tbody tr:nth-child(even) {
+  background-color: var(--color-gray-50);
+}
+
+/* Bordered Table */
+.table-bordered th,
+.table-bordered td {
+  border: 1px solid var(--table-border-color);
+}
+
+/* Compact Table */
+.table-sm th,
+.table-sm td {
+  padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+/* Responsive Table Wrapper */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Value Indicators (for portfolio gains/losses) */
+.positive,
+.text-success,
+.gain {
+  color: var(--color-success);
+}
+
+.negative,
+.text-danger,
+.loss {
+  color: var(--color-danger);
+}
+
+/* Numeric Columns */
+.table .text-right,
+.table .numeric {
+  text-align: right;
+  font-family: var(--font-family-mono);
+}
+
+/* =================== Responsive =================== */
+
+@media (max-width: 1200px) {
+  .pair-table-cell {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .pair-table-arrow {
+    transform: rotate(90deg);
+  }
+}
+
+@media (max-width: 768px) {
+  .table-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .table-actions select {
+    width: 100%;
+  }
+
+  .api-token-cell {
+    max-width: 150px;
+  }
+
+  .api-token-cell code {
+    font-size: 0.7rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .accounts-table {
+    font-size: var(--font-size-sm);
+  }
+
+  .accounts-table th,
+  .accounts-table td {
+    padding: 10px 8px;
+  }
+}

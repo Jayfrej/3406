@@ -1,0 +1,53 @@
+/* ============================================
+   MAIN.CSS - Entry Point
+   ============================================
+   7-1 Pattern CSS Architecture
+
+   Import Order:
+   1. Abstracts (Variables, Mixins)
+   2. Base (Reset, Typography, Animations)
+   3. Layout (Sidebar, Header, Container, Grid)
+   4. Components (Buttons, Cards, Forms, etc.)
+   5. Pages (Dashboard, Copy Trading, Settings, etc.)
+   6. Themes (Light Theme Overrides)
+   ============================================ */
+
+/* =================== 1. ABSTRACTS =================== */
+@import 'abstracts/_variables.css';
+
+/* =================== 2. BASE =================== */
+@import 'base/_reset.css';
+@import 'base/_typography.css';
+@import 'base/_animations.css';
+
+/* =================== 3. LAYOUT =================== */
+@import 'layout/_sidebar.css';
+@import 'layout/_header.css';
+@import 'layout/_container.css';
+@import 'layout/_grid.css';
+
+/* =================== 4. COMPONENTS =================== */
+@import 'components/_buttons.css';
+@import 'components/_cards.css';
+@import 'components/_forms.css';
+@import 'components/_tables.css';
+@import 'components/_badges.css';
+@import 'components/_alerts.css';
+@import 'components/_modals.css';
+@import 'components/_toast.css';
+@import 'components/_toasts.css';
+@import 'components/_loading.css';
+@import 'components/_scrollbar.css';
+
+/* =================== 5. PAGES =================== */
+@import 'pages/_dashboard.css';
+@import 'pages/_copytrading.css';
+@import 'pages/_history.css';
+@import 'pages/_settings.css';
+@import 'pages/_webhook.css';
+@import 'pages/_system-logs.css';
+@import 'pages/_symbol-mapping.css';
+
+/* =================== 6. THEMES =================== */
+@import 'themes/_dark-theme.css';
+@import 'themes/_light-theme.css';
