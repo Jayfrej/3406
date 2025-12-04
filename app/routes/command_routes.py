@@ -40,9 +40,11 @@ def get_command_api_rate_limit():
     """Get dynamic rate limit from settings"""
     try:
         settings = settings_service.load_settings()
-        return settings.get('command_api_rate_limit', '120 per minute')
+        # ✅ FIX: อ่านจาก rate_limits.command_api (ไม่ใช่ root level)
+        rate_limits = settings.get('rate_limits', {})
+        return rate_limits.get('command_api', '10000 per hour')  # ใช้ค่าเดียวกับ app_factory default
     except Exception:
-        return '120 per minute'
+        return '10000 per hour'  # fallback ให้สูงพอสำหรับ EA polling
 
 
 # =================== Command Queue API ===================

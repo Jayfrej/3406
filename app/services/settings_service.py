@@ -73,7 +73,7 @@ class SettingsService:
             'rate_limits': {
                 'webhook': '10 per minute',
                 'api': '100 per hour',
-                'command_api': '60 per minute',
+                'command_api': '10000 per hour',
                 'last_updated': None
             },
             'email': {
