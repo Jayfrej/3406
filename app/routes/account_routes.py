@@ -552,12 +552,32 @@ def add_webhook_account():
 @account_bp.route('/webhook-accounts/<account>', methods=['DELETE'])
 @require_auth
 def delete_webhook_account(account):
-    """Remove account from webhook allowlist"""
-    if account_allowlist_service.delete_webhook_account(account):
-        system_logs_service.add_log('warning', f'🗑️ [200] Webhook account removed: {account}')
-        return jsonify({"ok": True})
-    else:
-        return jsonify({"error": "Failed to delete webhook account"}), 500
+    """Remove account from webhook allowlist and cleanup associated data"""
+    try:
+        account = str(account)
+
+        # 1. Remove from webhook allowlist
+        if not account_allowlist_service.delete_webhook_account(account):
+            return jsonify({"error": "Failed to delete webhook account"}), 500
+
+        # 2. 🔥 CASCADE DELETE: Delete trade history for this account
+        deleted_history = 0
+        try:
+            deleted_history = delete_account_history_fn(account)
+            logger.info(f'[WEBHOOK_DELETE] Deleted {deleted_history} history records for account {account}')
+        except Exception as e:
+            logger.warning(f'[WEBHOOK_DELETE] Failed to delete history: {e}')
+
+        system_logs_service.add_log('warning', f'🗑️ [200] Webhook account removed: {account} (cleaned: {deleted_history} history records)')
+
+        return jsonify({
+            "ok": True,
+            "deleted_history": deleted_history
+        })
+
+    except Exception as e:
+        logger.error(f'[DELETE_WEBHOOK_ACCOUNT_ERROR] {e}')
+        return jsonify({"error": str(e)}), 500
 
 
 # =================== Symbol Mapping API Routes (New Endpoints) ===================
