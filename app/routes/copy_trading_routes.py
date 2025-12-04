@@ -460,7 +460,7 @@ def add_master_account():
 @copy_trading_bp.route('/api/copy/master-accounts/<account_id>', methods=['DELETE'])
 @require_auth
 def delete_master_account(account_id):
-    """ลบ Master Account"""
+    """ลบ Master Account พร้อม Cascade Delete (ลบ Pairs และ History ที่เกี่ยวข้อง)"""
     try:
         master_file = Path('data/master_accounts.json')
         if not master_file.exists():
@@ -471,19 +471,49 @@ def delete_master_account(account_id):
 
         # หา account ที่จะลบ
         original_count = len(masters)
+        # Find the actual account number from masters
+        account_number = None
+        for m in masters:
+            if m.get('id') == account_id or m.get('account') == account_id:
+                account_number = m.get('account')
+                break
+
         masters = [m for m in masters if m.get('id') != account_id and m.get('account') != account_id]
 
         if len(masters) == original_count:
             return jsonify({'error': 'Master account not found'}), 404
 
-        # บันทึก
+        # บันทึก master_accounts.json
         with open(master_file, 'w', encoding='utf-8') as f:
             json.dump(masters, f, indent=2, ensure_ascii=False)
 
-        logger.info(f"[API] Deleted master account: {account_id}")
-        system_logs_service.add_log('success', f'✅ [200] Master account {account_id} deleted')
+        # 🔥 CASCADE DELETE: ลบ Pairs และ History ที่เกี่ยวข้อง
+        deleted_pairs = 0
+        deleted_history = 0
 
-        return jsonify({'success': True})
+        if account_number:
+            try:
+                # ลบ Copy Pairs ทั้งหมดที่เกี่ยวข้องกับ account นี้
+                deleted_pairs = copy_manager.delete_pairs_by_account(account_number)
+                logger.info(f"[CASCADE_DELETE] Deleted {deleted_pairs} pairs for master account {account_number}")
+            except Exception as e:
+                logger.warning(f"[CASCADE_DELETE] Failed to delete pairs: {e}")
+
+            try:
+                # ลบ Copy Trading History ทั้งหมดที่เกี่ยวข้องกับ account นี้
+                deleted_history = copy_history.delete_by_account(account_number)
+                logger.info(f"[CASCADE_DELETE] Deleted {deleted_history} history events for master account {account_number}")
+            except Exception as e:
+                logger.warning(f"[CASCADE_DELETE] Failed to delete history: {e}")
+
+        logger.info(f"[API] Deleted master account: {account_id} (Pairs: {deleted_pairs}, History: {deleted_history})")
+        system_logs_service.add_log('success', f'✅ [200] Master account {account_id} deleted (cleaned: {deleted_pairs} pairs, {deleted_history} history events)')
+
+        return jsonify({
+            'success': True,
+            'deleted_pairs': deleted_pairs,
+            'deleted_history': deleted_history
+        })
 
     except Exception as e:
         logger.error(f"[API] Delete master account error: {e}")
@@ -567,7 +597,7 @@ def add_slave_account():
 @copy_trading_bp.route('/api/copy/slave-accounts/<account_id>', methods=['DELETE'])
 @require_auth
 def delete_slave_account(account_id):
-    """ลบ Slave Account"""
+    """ลบ Slave Account พร้อม Cascade Delete (ลบ Pairs และ History ที่เกี่ยวข้อง)"""
     try:
         slave_file = Path('data/slave_accounts.json')
         if not slave_file.exists():
@@ -578,19 +608,49 @@ def delete_slave_account(account_id):
 
         # หา account ที่จะลบ
         original_count = len(slaves)
+        # Find the actual account number from slaves
+        account_number = None
+        for s in slaves:
+            if s.get('id') == account_id or s.get('account') == account_id:
+                account_number = s.get('account')
+                break
+
         slaves = [s for s in slaves if s.get('id') != account_id and s.get('account') != account_id]
 
         if len(slaves) == original_count:
             return jsonify({'error': 'Slave account not found'}), 404
 
-        # บันทึก
+        # บันทึก slave_accounts.json
         with open(slave_file, 'w', encoding='utf-8') as f:
             json.dump(slaves, f, indent=2, ensure_ascii=False)
 
-        logger.info(f"[API] Deleted slave account: {account_id}")
-        system_logs_service.add_log('success', f'✅ [200] Slave account {account_id} deleted')
+        # 🔥 CASCADE DELETE: ลบ Pairs และ History ที่เกี่ยวข้อง
+        deleted_pairs = 0
+        deleted_history = 0
 
-        return jsonify({'success': True})
+        if account_number:
+            try:
+                # ลบ Copy Pairs ทั้งหมดที่เกี่ยวข้องกับ account นี้
+                deleted_pairs = copy_manager.delete_pairs_by_account(account_number)
+                logger.info(f"[CASCADE_DELETE] Deleted {deleted_pairs} pairs for slave account {account_number}")
+            except Exception as e:
+                logger.warning(f"[CASCADE_DELETE] Failed to delete pairs: {e}")
+
+            try:
+                # ลบ Copy Trading History ทั้งหมดที่เกี่ยวข้องกับ account นี้
+                deleted_history = copy_history.delete_by_account(account_number)
+                logger.info(f"[CASCADE_DELETE] Deleted {deleted_history} history events for slave account {account_number}")
+            except Exception as e:
+                logger.warning(f"[CASCADE_DELETE] Failed to delete history: {e}")
+
+        logger.info(f"[API] Deleted slave account: {account_id} (Pairs: {deleted_pairs}, History: {deleted_history})")
+        system_logs_service.add_log('success', f'✅ [200] Slave account {account_id} deleted (cleaned: {deleted_pairs} pairs, {deleted_history} history events)')
+
+        return jsonify({
+            'success': True,
+            'deleted_pairs': deleted_pairs,
+            'deleted_history': deleted_history
+        })
 
     except Exception as e:
         logger.error(f"[API] Delete slave account error: {e}")
