@@ -1387,16 +1387,18 @@ async loadData() {
     try {
       this.showLoading();
 
-      // Delete from server via API
+      // Delete from server via API (Cascade Delete: deletes pairs and history)
       await this.deleteMasterAccountFromServer(accountId);
 
-      // Remove from local array
-      this.masterAccounts = this.masterAccounts.filter(a =>
-        a.id !== accountId && a.accountNumber !== accountId
-      );
+      // 🔥 FIX: Reload data from server to get updated pairs (server already cascade deleted them)
+      await this.loadCopyPairs();
+      await this.loadMasterAccounts();
+      await this.loadSlaveAccounts();
 
       // Render UI
       this.renderMasterAccounts();
+      this.renderSlaveAccounts();
+      this.renderCopyPairs();
       this.updatePairCount();
 
       this.showToast('Master account removed successfully', 'success');
@@ -1419,16 +1421,18 @@ async loadData() {
     try {
       this.showLoading();
 
-      // Delete from server via API
+      // Delete from server via API (Cascade Delete: deletes pairs and history)
       await this.deleteSlaveAccountFromServer(accountId);
 
-      // Remove from local array
-      this.slaveAccounts = this.slaveAccounts.filter(a =>
-        a.id !== accountId && a.accountNumber !== accountId
-      );
+      // 🔥 FIX: Reload data from server to get updated pairs (server already cascade deleted them)
+      await this.loadCopyPairs();
+      await this.loadMasterAccounts();
+      await this.loadSlaveAccounts();
 
       // Render UI
+      this.renderMasterAccounts();
       this.renderSlaveAccounts();
+      this.renderCopyPairs();
       this.updatePairCount();
 
       this.showToast('Slave account removed successfully', 'success');
