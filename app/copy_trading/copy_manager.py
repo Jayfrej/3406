@@ -420,3 +420,192 @@ class CopyManager:
             self._save_pairs()
 
         return deactivated_count
+
+    # =================== Multi-User Methods (Phase 1.3) ===================
+    # Reference: MIGRATION_ROADMAP.md Phase 1.3 - CopyManager Extensions
+
+    def get_pairs_by_user(self, user_id: str) -> List[Dict]:
+        """
+        Get all copy pairs for a specific user.
+
+        Per MIGRATION_ROADMAP.md: Must filter by user_id
+
+        Args:
+            user_id: User ID to filter by
+
+        Returns:
+            List of pair dictionaries belonging to the user
+        """
+        return [p for p in self.pairs if p.get('user_id') == user_id]
+
+    def get_pair_owner(self, pair_id: str) -> Optional[str]:
+        """
+        Get user_id who owns this pair.
+
+        Per MIGRATION_ROADMAP.md Phase 1.3
+
+        Args:
+            pair_id: Pair ID to check
+
+        Returns:
+            str: User ID or None if not found
+        """
+        pair = self.get_pair_by_id(pair_id)
+        if pair:
+            return pair.get('user_id')
+        return None
+
+    def create_pair_for_user(self, user_id: str, master_account: str, slave_account: str,
+                             settings: Dict, master_nickname: str = "",
+                             slave_nickname: str = "") -> Dict:
+        """
+        Create a Copy Pair for a specific user.
+
+        Extended version of create_pair for multi-user support.
+
+        Args:
+            user_id: User ID who will own this pair
+            master_account: Master account number
+            slave_account: Slave account number
+            settings: Pair settings
+            master_nickname: Master account nickname
+            slave_nickname: Slave account nickname
+
+        Returns:
+            Dict: Created pair object
+        """
+        try:
+            # Generate API Key
+            api_key = self.generate_api_key()
+
+            # Create Pair object with user_id
+            pair = {
+                'id': f"pair_{int(datetime.now().timestamp() * 1000)}",
+                'user_id': user_id,  # Multi-user support
+                'master_account': str(master_account),
+                'slave_account': str(slave_account),
+                'master_nickname': master_nickname,
+                'slave_nickname': slave_nickname,
+                'api_key': api_key,
+                'status': 'active',
+                'settings': {
+                    'auto_map_symbol': settings.get('auto_map_symbol', True),
+                    'auto_map_volume': settings.get('auto_map_volume', True),
+                    'copy_psl': settings.get('copy_psl', True),
+                    'volume_mode': settings.get('volume_mode', 'multiply'),
+                    'multiplier': float(settings.get('multiplier', 2.0))
+                },
+                'created': datetime.now().isoformat(),
+                'updated': datetime.now().isoformat()
+            }
+
+            # Add Pair
+            self.pairs.append(pair)
+
+            # Add API Key mapping
+            self.api_keys[api_key] = pair['id']
+
+            # Save
+            self._save_pairs()
+            self._save_api_keys()
+
+            logger.info(f"[COPY_MANAGER] Created pair for user {user_id}: {master_account} -> {slave_account}")
+
+            # Send Email Alert
+            if self.email_handler:
+                try:
+                    self.email_handler.send_copy_pair_created_alert(
+                        master_account=master_account,
+                        slave_account=slave_account,
+                        master_nickname=master_nickname,
+                        slave_nickname=slave_nickname,
+                        settings=pair['settings']
+                    )
+                except Exception as e:
+                    logger.error(f"[COPY_MANAGER] Failed to send email alert: {e}")
+
+            return pair
+
+        except Exception as e:
+            logger.error(f"[COPY_MANAGER] Failed to create pair for user: {e}")
+            raise
+
+    def get_active_pairs_by_user(self, user_id: str) -> List[Dict]:
+        """
+        Get all active pairs for a specific user.
+
+        Args:
+            user_id: User ID to filter by
+
+        Returns:
+            List of active pair dictionaries belonging to the user
+        """
+        return [p for p in self.pairs
+                if p.get('user_id') == user_id and p.get('status') == 'active']
+
+    def delete_pairs_by_user(self, user_id: str) -> int:
+        """
+        Delete all pairs for a specific user (for account deletion/cleanup).
+
+        Args:
+            user_id: User ID whose pairs should be deleted
+
+        Returns:
+            int: Number of pairs deleted
+        """
+        pairs_to_delete = [p for p in self.pairs if p.get('user_id') == user_id]
+        deleted_count = len(pairs_to_delete)
+
+        # Cleanup API keys
+        for pair in pairs_to_delete:
+            api_key = pair.get('api_key')
+            if api_key and api_key in self.api_keys:
+                if isinstance(self.api_keys[api_key], list):
+                    self.api_keys[api_key] = [
+                        pid for pid in self.api_keys[api_key] if pid != pair.get('id')
+                    ]
+                    if not self.api_keys[api_key]:
+                        del self.api_keys[api_key]
+                else:
+                    del self.api_keys[api_key]
+
+        # Remove pairs
+        self.pairs = [p for p in self.pairs if p.get('user_id') != user_id]
+
+        if deleted_count > 0:
+            self._save_pairs()
+            self._save_api_keys()
+            logger.info(f"[COPY_MANAGER] Deleted {deleted_count} pairs for user {user_id}")
+
+        return deleted_count
+
+    def count_pairs_by_user(self, user_id: str) -> int:
+        """
+        Count total pairs for a specific user.
+
+        Args:
+            user_id: User ID to count for
+
+        Returns:
+            int: Number of pairs
+        """
+        return len([p for p in self.pairs if p.get('user_id') == user_id])
+
+    def validate_pair_ownership(self, pair_id: str, user_id: str) -> bool:
+        """
+        Validate that a pair belongs to a specific user.
+
+        Per copilot-instructions.md: Must validate ownership before operations
+
+        Args:
+            pair_id: Pair ID to check
+            user_id: User ID to validate against
+
+        Returns:
+            bool: True if pair belongs to user
+        """
+        pair = self.get_pair_by_id(pair_id)
+        if not pair:
+            return False
+        return pair.get('user_id') == user_id
+

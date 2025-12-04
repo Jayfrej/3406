@@ -36,6 +36,11 @@ class SetupWizard:
         self.mt5_main_path = tk.StringVar()
         self.mt5_instances_dir = tk.StringVar()
         
+        # Google OAuth Variables (Multi-User SaaS)
+        self.google_client_id = tk.StringVar()
+        self.google_client_secret = tk.StringVar()
+        self.admin_email = tk.StringVar()
+
         # Auto-set instances directory
         self.mt5_instances_dir.set(str(self.base_dir / 'mt5_instances'))
         
@@ -190,43 +195,101 @@ class SetupWizard:
         config_grid = ttk.Frame(step3_frame)
         config_grid.pack(fill=tk.X)
         
-        # Username
-        tk.Label(config_grid, text="Username:", 
+        # Server URL (Required)
+        tk.Label(config_grid, text="Server URL:",
                 font=("Segoe UI", 9, "bold"),
                 bg=self.bg_dark, fg=self.fg_primary).grid(row=0, column=0, sticky=tk.W, pady=8)
-        user_entry = ttk.Entry(config_grid, textvariable=self.basic_user, width=40)
-        user_entry.grid(row=0, column=1, pady=8, padx=(15, 0), sticky=tk.EW)
-        
-        # Password
-        tk.Label(config_grid, text="Password:", 
-                font=("Segoe UI", 9, "bold"),
-                bg=self.bg_dark, fg=self.fg_primary).grid(row=1, column=0, sticky=tk.W, pady=8)
-        pass_entry = ttk.Entry(config_grid, textvariable=self.basic_password, show="●", width=40)
-        pass_entry.grid(row=1, column=1, pady=8, padx=(15, 0), sticky=tk.EW)
-        
-        # Server URL
-        tk.Label(config_grid, text="Server URL:", 
-                font=("Segoe UI", 9, "bold"),
-                bg=self.bg_dark, fg=self.fg_primary).grid(row=2, column=0, sticky=tk.W, pady=8)
         url_entry = ttk.Entry(config_grid, textvariable=self.external_base_url, width=40)
-        url_entry.grid(row=2, column=1, pady=8, padx=(15, 0), sticky=tk.EW)
-        
+        url_entry.grid(row=0, column=1, pady=8, padx=(15, 0), sticky=tk.EW)
+
+        # Basic Auth Section (Optional - for legacy/fallback)
+        tk.Label(config_grid, text="Basic Auth (Optional - Fallback):",
+                font=("Segoe UI", 8),
+                bg=self.bg_dark, fg=self.accent_yellow).grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(15, 5))
+
+        # Username (Optional)
+        tk.Label(config_grid, text="Username:",
+                font=("Segoe UI", 9),
+                bg=self.bg_dark, fg=self.fg_secondary).grid(row=2, column=0, sticky=tk.W, pady=8)
+        user_entry = ttk.Entry(config_grid, textvariable=self.basic_user, width=40)
+        user_entry.grid(row=2, column=1, pady=8, padx=(15, 0), sticky=tk.EW)
+
+        # Password (Optional)
+        tk.Label(config_grid, text="Password:",
+                font=("Segoe UI", 9),
+                bg=self.bg_dark, fg=self.fg_secondary).grid(row=3, column=0, sticky=tk.W, pady=8)
+        pass_entry = ttk.Entry(config_grid, textvariable=self.basic_password, show="●", width=40)
+        pass_entry.grid(row=3, column=1, pady=8, padx=(15, 0), sticky=tk.EW)
+
+        tk.Label(config_grid, text="(Leave blank if using only Google OAuth)",
+                font=("Segoe UI", 8),
+                bg=self.bg_dark, fg=self.fg_secondary).grid(row=4, column=1, sticky=tk.W, padx=(15, 0))
+
         config_grid.columnconfigure(1, weight=1)
         
-        # Step 4: MT5 Configuration
-        step4_frame = ttk.LabelFrame(content, text=" 📊 Step 4: MT5 Settings ", padding="20")
+        # Step 4: Google OAuth Configuration (Multi-User SaaS)
+        step4_frame = ttk.LabelFrame(content, text=" 🔐 Step 4: Google OAuth (Multi-User) ", padding="20")
         step4_frame.pack(fill=tk.X, pady=(0, 15))
         
+        tk.Label(step4_frame, text="Configure Google OAuth for multi-user authentication",
+                font=("Segoe UI", 9),
+                bg=self.bg_dark,
+                fg=self.fg_secondary).pack(anchor=tk.W, pady=(0,5))
+
+        tk.Label(step4_frame, text="Get credentials from: https://console.cloud.google.com/",
+                font=("Segoe UI", 8),
+                bg=self.bg_dark,
+                fg=self.accent_blue).pack(anchor=tk.W, pady=(0,10))
+
+        oauth_grid = ttk.Frame(step4_frame)
+        oauth_grid.pack(fill=tk.X)
+
+        # Google Client ID
+        tk.Label(oauth_grid, text="Google Client ID:",
+                font=("Segoe UI", 9, "bold"),
+                bg=self.bg_dark, fg=self.fg_primary).grid(row=0, column=0, sticky=tk.W, pady=8)
+        google_id_entry = ttk.Entry(oauth_grid, textvariable=self.google_client_id, width=50)
+        google_id_entry.grid(row=0, column=1, pady=8, padx=(15, 0), sticky=tk.EW)
+
+        # Google Client Secret
+        tk.Label(oauth_grid, text="Google Client Secret:",
+                font=("Segoe UI", 9, "bold"),
+                bg=self.bg_dark, fg=self.fg_primary).grid(row=1, column=0, sticky=tk.W, pady=8)
+        google_secret_entry = ttk.Entry(oauth_grid, textvariable=self.google_client_secret, show="●", width=50)
+        google_secret_entry.grid(row=1, column=1, pady=8, padx=(15, 0), sticky=tk.EW)
+
+        # Admin Email
+        tk.Label(oauth_grid, text="Admin Email:",
+                font=("Segoe UI", 9, "bold"),
+                bg=self.bg_dark, fg=self.fg_primary).grid(row=2, column=0, sticky=tk.W, pady=8)
+        admin_email_entry = ttk.Entry(oauth_grid, textvariable=self.admin_email, width=50)
+        admin_email_entry.grid(row=2, column=1, pady=8, padx=(15, 0), sticky=tk.EW)
+
+        tk.Label(oauth_grid, text="(Optional - Leave blank to configure later)",
+                font=("Segoe UI", 8),
+                bg=self.bg_dark, fg=self.fg_secondary).grid(row=3, column=1, sticky=tk.W, padx=(15, 0))
+
+        oauth_grid.columnconfigure(1, weight=1)
+
+        # Step 5: MT5 Configuration (OPTIONAL)
+        step5_frame = ttk.LabelFrame(content, text=" 📊 Step 5: MT5 Settings (Optional) ", padding="20")
+        step5_frame.pack(fill=tk.X, pady=(0, 15))
+
+        tk.Label(step5_frame, text="MT5 configuration is optional - you can skip this step",
+                font=("Segoe UI", 9),
+                bg=self.bg_dark,
+                fg=self.accent_yellow).pack(anchor=tk.W, pady=(0,10))
+
         # MT5 Executable
-        tk.Label(step4_frame, text="MT5 Executable Path", 
+        tk.Label(step5_frame, text="MT5 Executable Path (Optional)",
                 font=("Segoe UI", 9, "bold"),
                 bg=self.bg_dark, fg=self.fg_primary).pack(anchor=tk.W, pady=(0,5))
         
-        tk.Label(step4_frame, text="Select terminal64.exe from your MT5 installation", 
+        tk.Label(step5_frame, text="Select terminal64.exe from your MT5 installation (skip if not using local MT5)",
                 font=("Segoe UI", 8),
                 bg=self.bg_dark, fg=self.fg_secondary).pack(anchor=tk.W, pady=(0,8))
         
-        path_frame = ttk.Frame(step4_frame)
+        path_frame = ttk.Frame(step5_frame)
         path_frame.pack(fill=tk.X, pady=(0,15))
         
         path1_entry = ttk.Entry(path_frame, textvariable=self.mt5_main_path)
@@ -236,16 +299,16 @@ class SetupWizard:
         browse1_btn.pack(side=tk.RIGHT)
         
         # Instances Directory (read-only info)
-        tk.Label(step4_frame, text="Instances Directory", 
+        tk.Label(step5_frame, text="Instances Directory",
                 font=("Segoe UI", 9, "bold"),
                 bg=self.bg_dark, fg=self.fg_primary).pack(anchor=tk.W, pady=(10,5))
         
-        tk.Label(step4_frame, text="Auto-created location for MT5 account instances", 
+        tk.Label(step5_frame, text="Auto-created location for MT5 account instances",
                 font=("Segoe UI", 8),
                 bg=self.bg_dark, fg=self.fg_secondary).pack(anchor=tk.W, pady=(0,8))
         
         instances_display = tk.Label(
-            step4_frame,
+            step5_frame,
             textvariable=self.mt5_instances_dir,
             font=("Segoe UI", 9),
             bg=self.bg_input,
@@ -257,17 +320,17 @@ class SetupWizard:
         )
         instances_display.pack(fill=tk.X)
         
-        # Step 5: Launch
-        step5_frame = ttk.LabelFrame(content, text=" 🚀 Step 5: Start Server ", padding="20")
-        step5_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        tk.Label(step5_frame, text="Ready to launch your trading server", 
+        # Step 6: Launch
+        step6_frame = ttk.LabelFrame(content, text=" 🚀 Step 6: Start Server ", padding="20")
+        step6_frame.pack(fill=tk.X, pady=(0, 10))
+
+        tk.Label(step6_frame, text="Ready to launch your trading server",
                 font=("Segoe UI", 9),
                 bg=self.bg_dark,
                 fg=self.fg_secondary).pack(anchor=tk.W, pady=(0,15))
         
         self.start_btn = ttk.Button(
-            step5_frame,
+            step6_frame,
             text="🚀 Start Server",
             command=self.start_server,
             state=tk.DISABLED
@@ -289,7 +352,8 @@ class SetupWizard:
                 'data',
                 'data/commands',
                 'mt5_instances',
-                'backup'
+                'backup',
+                'migrations'
             ]
             
             created = []
@@ -327,6 +391,54 @@ class SetupWizard:
             messagebox.showerror("Error", f"Failed to create directories:\n{str(e)}")
             self.dir_status.config(text=f"✗ Error: {str(e)}", fg=self.accent_red)
     
+    def run_database_migrations(self):
+        """Run database migrations to set up multi-user tables"""
+        migration_results = []
+
+        try:
+            # Migration 001: Add users table
+            migration_001 = self.base_dir / 'migrations' / '001_add_users_table.py'
+            if migration_001.exists():
+                result = subprocess.run(
+                    [sys.executable, str(migration_001)],
+                    capture_output=True,
+                    text=True,
+                    cwd=str(self.base_dir)
+                )
+                if result.returncode == 0:
+                    migration_results.append("✓ Database schema created")
+                else:
+                    migration_results.append(f"⚠ Migration 001: {result.stderr[:100]}")
+
+            # Migration 002: Migrate copy pairs JSON
+            migration_002 = self.base_dir / 'migrations' / '002_migrate_copy_pairs_json.py'
+            if migration_002.exists():
+                result = subprocess.run(
+                    [sys.executable, str(migration_002)],
+                    capture_output=True,
+                    text=True,
+                    cwd=str(self.base_dir)
+                )
+                if result.returncode == 0:
+                    migration_results.append("✓ Copy pairs migrated")
+
+            # Migration 003: Migrate webhook accounts JSON
+            migration_003 = self.base_dir / 'migrations' / '003_migrate_webhook_accounts.py'
+            if migration_003.exists():
+                result = subprocess.run(
+                    [sys.executable, str(migration_003)],
+                    capture_output=True,
+                    text=True,
+                    cwd=str(self.base_dir)
+                )
+                if result.returncode == 0:
+                    migration_results.append("✓ Webhook accounts migrated")
+
+            return True, migration_results
+
+        except Exception as e:
+            return False, [f"Migration error: {str(e)}"]
+
     def browse_main_path(self):
         filename = filedialog.askopenfilename(
             title="Select MT5 Terminal Executable (terminal64.exe)",
@@ -342,13 +454,20 @@ class SetupWizard:
         
         def install():
             try:
-                requirements = """Flask==2.3.3
+                requirements = """# Core Flask Dependencies
+Flask==2.3.3
 Flask-Limiter==2.8.1
 Flask-Cors==4.0.0
-python-dotenv==1.0.0
-psutil==5.9.6
-requests==2.31.0
 werkzeug==2.3.7
+
+# Environment & Configuration
+python-dotenv==1.0.0
+
+# System Monitoring
+psutil==5.9.6
+
+# HTTP Client (Required for Google OAuth)
+requests==2.31.0
 """
                 with open("requirements.txt", "w") as f:
                     f.write(requirements)
@@ -390,24 +509,22 @@ werkzeug==2.3.7
             messagebox.showerror("Error", f"Installation failed:\n{error if error else 'Unknown error'}")
     
     def validate_inputs(self):
-        if not self.basic_user.get():
-            messagebox.showwarning("Validation Error", "Please enter a username")
-            return False
-        if not self.basic_password.get():
-            messagebox.showwarning("Validation Error", "Please enter a password")
-            return False
-        if len(self.basic_password.get()) < 6:
-            messagebox.showwarning("Validation Error", "Password must be at least 6 characters")
-            return False
+        # Server URL is always required
         if not self.external_base_url.get():
             messagebox.showwarning("Validation Error", "Please enter server URL")
             return False
-        if not self.mt5_main_path.get():
-            messagebox.showwarning("Validation Error", "Please select MT5 executable")
+
+        # Basic Auth validation (only if user provides values)
+        if self.basic_password.get() and len(self.basic_password.get()) < 6:
+            messagebox.showwarning("Validation Error", "If providing a password, it must be at least 6 characters")
             return False
-        if not os.path.exists(self.mt5_main_path.get()):
-            messagebox.showerror("Error", "MT5 executable not found")
-            return False
+
+        # MT5 is optional - only validate if path is provided
+        if self.mt5_main_path.get():
+            if not os.path.exists(self.mt5_main_path.get()):
+                messagebox.showerror("Error", "MT5 executable not found at specified path")
+                return False
+
         return True
     
     def start_server(self):
@@ -416,23 +533,56 @@ werkzeug==2.3.7
         
         try:
             import secrets
+
+            # SECRET_KEY is required for Flask session encryption
+            # This is a SERVER-LEVEL key, not a user token
             secret_key = secrets.token_urlsafe(32)
-            webhook_token = secrets.token_urlsafe(16)
-            
+
+            # NOTE: We do NOT generate WEBHOOK_TOKEN here anymore!
+            # In Multi-User SaaS mode, each user gets their own webhook token
+            # when they log in via Google OAuth. Tokens are stored in the
+            # user_tokens database table.
+
+            # Build MT5 config section (only include if path provided)
+            mt5_section = f"""# MT5 Configuration
+MT5_MAIN_PATH={self.mt5_main_path.get()}
+MT5_PROFILE_SOURCE=
+MT5_INSTANCES_DIR={self.mt5_instances_dir.get()}
+""" if self.mt5_main_path.get() else """# MT5 Configuration (Not configured - using Remote EA mode)
+MT5_MAIN_PATH=
+MT5_PROFILE_SOURCE=
+MT5_INSTANCES_DIR=
+"""
+
+            # Build Google OAuth section
+            google_section = f"""# Google OAuth (Multi-User SaaS)
+GOOGLE_CLIENT_ID={self.google_client_id.get()}
+GOOGLE_CLIENT_SECRET={self.google_client_secret.get()}
+GOOGLE_REDIRECT_URI={self.external_base_url.get()}/auth/google/callback
+ADMIN_EMAIL={self.admin_email.get()}
+"""
+
             env_content = f"""# Server Configuration
+# SECRET_KEY: Required for Flask session encryption (server-level, not user-specific)
 SECRET_KEY={secret_key}
+
+# Legacy Basic Auth (Optional - only if not using Google OAuth)
 BASIC_USER={self.basic_user.get()}
 BASIC_PASS={self.basic_password.get()}
 EXTERNAL_BASE_URL={self.external_base_url.get()}
 
 # Webhook Configuration
-WEBHOOK_TOKEN={webhook_token}
+# NOTE: In Multi-User SaaS mode, each user gets their own webhook token
+# when they log in via Google OAuth. No global WEBHOOK_TOKEN needed.
+# WEBHOOK_TOKEN is only for legacy/backward compatibility.
 WEBHOOK_RATE_LIMIT=60/minute
 
-# MT5 Configuration
-MT5_MAIN_PATH={self.mt5_main_path.get()}
-MT5_PROFILE_SOURCE=
-MT5_INSTANCES_DIR={self.mt5_instances_dir.get()}
+{mt5_section}
+{google_section}
+# Session Configuration
+SESSION_COOKIE_HTTPONLY=True
+SESSION_COOKIE_SAMESITE=Lax
+SESSION_COOKIE_SECURE=False
 
 # Email Configuration (Optional)
 EMAIL_NOTIFICATIONS_ENABLED=false
@@ -452,20 +602,66 @@ LOG_FILE=logs/trading_bot.log
             with open(".env", "w") as f:
                 f.write(env_content)
             
+            # Run database migrations automatically
+            self.status_label.config(text="● Running database migrations...", fg=self.accent_yellow)
+            self.root.update()
+
+            migration_success, migration_results = self.run_database_migrations()
+
+            if not migration_success:
+                messagebox.showwarning(
+                    "Migration Warning",
+                    "Database migrations may not have completed successfully.\n\n"
+                    + "\n".join(migration_results) +
+                    "\n\nYou can run migrations manually later with:\n"
+                    "python migrations/001_add_users_table.py"
+                )
+
             if not os.path.exists("server.py"):
                 self.create_server_file()
             
-            webhook_url = f"{self.external_base_url.get()}/webhook/{webhook_token}"
-            
-            result = messagebox.askokcancel(
-                "Ready to Launch",
-                f"✓ Configuration complete!\n\n"
-                f"Web Interface: {self.external_base_url.get()}\n"
-                f"Username: {self.basic_user.get()}\n\n"
-                f"Webhook URL:\n{webhook_url}\n\n"
-                f"Start the server now?"
-            )
-            
+            # Build the launch message based on configuration
+            if self.google_client_id.get() and self.google_client_secret.get():
+                # Multi-User SaaS mode
+                launch_msg = (
+                    f"✓ Configuration complete!\n\n"
+                    f"Web Interface: {self.external_base_url.get()}\n\n"
+                    f"🔐 Multi-User Mode Enabled\n"
+                    f"• Users will login via Google OAuth\n"
+                    f"• Each user gets their own webhook URL after login\n"
+                    f"• Admin email: {self.admin_email.get() or '(not set)'}\n\n"
+                    f"Database: {'✓ Migrated' if migration_success else '⚠ Check migrations'}\n\n"
+                    f"Start the server now?"
+                )
+                success_msg = (
+                    f"Server is now running!\n\n"
+                    f"Access: {self.external_base_url.get()}\n\n"
+                    f"🔐 Multi-User SaaS Mode\n"
+                    f"Users should login with Google to get their personal webhook URL.\n\n"
+                    f"Admin: {self.admin_email.get() or 'First user to login'}"
+                )
+            else:
+                # Legacy mode (no Google OAuth configured)
+                # Note: No webhook URL shown - user must configure Google OAuth
+                launch_msg = (
+                    f"✓ Configuration complete!\n\n"
+                    f"Web Interface: {self.external_base_url.get()}\n"
+                    f"Username: {self.basic_user.get()}\n\n"
+                    f"⚠ Legacy Mode (Google OAuth not configured)\n"
+                    f"You can still use Basic Auth to access the dashboard,\n"
+                    f"but webhook functionality requires Google OAuth.\n\n"
+                    f"Start the server now?"
+                )
+                success_msg = (
+                    f"Server is now running!\n\n"
+                    f"Access: {self.external_base_url.get()}\n\n"
+                    f"⚠ Legacy Mode\n"
+                    f"To enable webhooks, configure Google OAuth\n"
+                    f"in the .env file and restart the server."
+                )
+
+            result = messagebox.askokcancel("Ready to Launch", launch_msg)
+
             if result:
                 self.status_label.config(text="● Server starting...", fg=self.accent_blue)
                 
@@ -476,73 +672,63 @@ LOG_FILE=logs/trading_bot.log
                 
                 self.status_label.config(text="● Server is running!", fg=self.accent_green)
                 
-                messagebox.showinfo(
-                    "Server Started",
-                    f"Server is now running!\n\n"
-                    f"Access: {self.external_base_url.get()}\n\n"
-                    f"Use this webhook in TradingView:\n{webhook_url}"
-                )
-            
+                messagebox.showinfo("Server Started", success_msg)
+
         except Exception as e:
             messagebox.showerror("Error", f"Failed to start server:\n{str(e)}")
             self.status_label.config(text="● Error occurred", fg=self.accent_red)
     
     def create_server_file(self):
-        """Create a basic server.py file"""
-        server_content = """from flask import Flask, request, jsonify, send_from_directory
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-from functools import wraps
+        """
+        Create a basic server.py file - ONLY if main server.py doesn't exist.
+
+        NOTE: This creates a MINIMAL fallback server.
+        The actual server.py in this project is much more sophisticated
+        and uses the app factory pattern with multi-user support.
+        This method should rarely be called.
+        """
+        server_content = '''#!/usr/bin/env python3
+"""
+FALLBACK SERVER - Created by setup.py
+This is a minimal server for testing. The real server uses app factory pattern.
+"""
+from flask import Flask, request, jsonify, send_from_directory, redirect, session
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = Flask(__name__, static_folder='static')
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
-
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"]
-)
-
-def require_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        auth = request.authorization
-        if not auth or not (auth.username == os.getenv('BASIC_USER') and 
-                           auth.password == os.getenv('BASIC_PASS')):
-            return jsonify({'error': 'Unauthorized'}), 401
-        return f(*args, **kwargs)
-    return decorated
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
 
 @app.route('/')
-@require_auth
 def home():
+    # Redirect to login if not authenticated
+    if not session.get('user_id') and not session.get('auth'):
+        return redirect('/login')
     return send_from_directory('static', 'index.html')
+
+@app.route('/login')
+def login():
+    return send_from_directory('static', 'login.html')
+
+@app.route('/login/google')
+def google_login():
+    return jsonify({
+        'error': 'Google OAuth not configured in fallback server',
+        'note': 'Please use the main server.py with app factory'
+    }), 501
 
 @app.route('/health')
 def health():
-    return jsonify({'status': 'running', 'message': 'MT5 Bridge Server'})
-
-@app.route('/webhook/<token>', methods=['POST'])
-@limiter.limit(os.getenv('WEBHOOK_RATE_LIMIT', '60/minute'))
-def webhook(token):
-    if token != os.getenv('WEBHOOK_TOKEN'):
-        return jsonify({'error': 'Invalid token'}), 403
-    
-    try:
-        data = request.json
-        print(f"Received webhook: {data}")
-        return jsonify({'status': 'success', 'data': data})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+    return jsonify({'status': 'running', 'message': 'Fallback Server'})
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
+    print(f"WARNING: Running fallback server on port {port}")
+    print("For full multi-user support, use the main server.py")
     app.run(host='0.0.0.0', port=port, debug=True)
-"""
+'''
         with open("server.py", "w") as f:
             f.write(server_content)
 

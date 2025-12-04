@@ -19,8 +19,14 @@ class ServerConfig:
 
 @dataclass
 class WebhookConfig:
-    """Webhook configuration settings"""
-    token: str = ""
+    """
+    Webhook configuration settings.
+
+    NOTE: In Multi-User SaaS mode, the 'token' field is LEGACY only.
+    Each user gets their own webhook token stored in the user_tokens table.
+    The global WEBHOOK_TOKEN is only for backward compatibility.
+    """
+    token: str = ""  # Legacy - per-user tokens are in database
     external_base_url: str = "http://localhost:5000"
     rate_limit: str = "10 per minute"
 

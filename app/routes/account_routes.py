@@ -50,9 +50,26 @@ def init_account_routes(sm, sls, aas, cm, ch, dah_fn):
 @account_bp.route('/accounts', methods=['GET'])
 @require_auth
 def get_accounts():
-    """Get all accounts"""
+    """Get all accounts for the current user (Multi-User SaaS)"""
     try:
-        return jsonify({'accounts': session_manager.get_all_accounts()})
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
+        user_id = get_current_user_id()
+
+        # If user_id exists, filter by user (multi-user mode)
+        # Otherwise fall back to all accounts (legacy/admin mode)
+        if user_id and hasattr(session_manager, 'get_accounts_by_user'):
+            # Check if user is admin - admins see all accounts
+            is_admin = session.get('is_admin', False)
+            if is_admin:
+                accounts = session_manager.get_all_accounts()
+            else:
+                accounts = session_manager.get_accounts_by_user(user_id)
+        else:
+            accounts = session_manager.get_all_accounts()
+
+        return jsonify({'accounts': accounts})
     except Exception as e:
         logger.error(f"[GET_ACCOUNTS_ERROR] {e}")
         return jsonify({'error': str(e)}), 500
@@ -61,8 +78,10 @@ def get_accounts():
 @account_bp.route('/accounts', methods=['POST'])
 @require_auth
 def add_account():
-    """Add a new account"""
+    """Add a new account (assigned to current user in Multi-User SaaS)"""
     try:
+        from app.middleware.auth import get_current_user_id
+
         data = request.get_json() or {}
         account = str(data.get('account', '')).strip()
         nickname = str(data.get('nickname', '')).strip()
@@ -74,9 +93,17 @@ def add_account():
             system_logs_service.add_log('warning', f'⚠️ [400] Account creation failed - {account} already exists')
             return jsonify({'error': 'Account already exists'}), 400
 
-        # Add remote account (waits for EA connection)
-        if session_manager.add_remote_account(account, nickname):
-            logger.info(f"[REMOTE_ACCOUNT_ADDED] {account} ({nickname})")
+        # Get current user_id for assignment
+        user_id = get_current_user_id()
+
+        # Add remote account with user assignment (Multi-User SaaS)
+        if hasattr(session_manager, 'add_remote_account_with_user') and user_id:
+            success = session_manager.add_remote_account_with_user(account, nickname, user_id)
+        else:
+            success = session_manager.add_remote_account(account, nickname)
+
+        if success:
+            logger.info(f"[REMOTE_ACCOUNT_ADDED] {account} ({nickname}) - user: {user_id}")
             system_logs_service.add_log('success', f'✅ Account {account} added (waiting for EA connection)')
             return jsonify({
                 'success': True,
@@ -115,9 +142,21 @@ def open_account(account):
 def pause_account(account):
     """Pause account - set status to PAUSE to block incoming signals"""
     try:
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
         account = str(account).strip()
         if not session_manager.account_exists(account):
             return jsonify({'error': 'Account not found'}), 404
+
+        # Multi-User SaaS: Validate ownership before pause
+        user_id = get_current_user_id()
+        is_admin = session.get('is_admin', False)
+
+        if user_id and hasattr(session_manager, 'get_account_owner') and not is_admin:
+            owner = session_manager.get_account_owner(account)
+            if owner and owner != user_id:
+                return jsonify({'error': 'Access denied - you do not own this account'}), 403
 
         # Update status to PAUSE
         session_manager.update_account_status(account, 'PAUSE')
@@ -138,9 +177,21 @@ def pause_account(account):
 def resume_account(account):
     """Resume account - set status back to Online"""
     try:
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
         account = str(account).strip()
         if not session_manager.account_exists(account):
             return jsonify({'error': 'Account not found'}), 404
+
+        # Multi-User SaaS: Validate ownership before resume
+        user_id = get_current_user_id()
+        is_admin = session.get('is_admin', False)
+
+        if user_id and hasattr(session_manager, 'get_account_owner') and not is_admin:
+            owner = session_manager.get_account_owner(account)
+            if owner and owner != user_id:
+                return jsonify({'error': 'Access denied - you do not own this account'}), 403
 
         # Get current status
         account_info = session_manager.get_account_info(account)
@@ -164,11 +215,25 @@ def resume_account(account):
 @account_bp.route('/accounts/<account>', methods=['DELETE'])
 @require_auth
 def delete_account(account):
-    """Delete account and cleanup all associated data"""
+    """Delete account and cleanup all associated data (with ownership validation)"""
     try:
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
         account = str(account)
+
+        # Multi-User SaaS: Validate ownership before deletion
+        user_id = get_current_user_id()
+        is_admin = session.get('is_admin', False)
+
+        if user_id and hasattr(session_manager, 'get_account_owner') and not is_admin:
+            owner = session_manager.get_account_owner(account)
+            if owner and owner != user_id:
+                logger.warning(f"[DELETE_ACCOUNT] Access denied: user {user_id} tried to delete account {account} owned by {owner}")
+                return jsonify({'error': 'Access denied - you do not own this account'}), 403
+
         ok = session_manager.delete_account(account)
-        logger.info(f'[DELETE_ACCOUNT] account={account} ok={ok}')
+        logger.info(f'[DELETE_ACCOUNT] account={account} ok={ok} by_user={user_id}')
 
         if ok:
             cleanup_logs = []

@@ -1000,148 +1000,224 @@ pause
             except psutil.Error:
                 pass
 
-        # Fallback: scan processes
-        if psutil:
-            for _ in self._iter_instance_procs(account):
-                return True
-
         return False
 
-    # -------------------- Create / Start / Stop --------------------
-    def ensure_instance(self, account: str, nickname: str = "") -> bool:
-        """ไม่ใช้แล้วในระบบ Remote"""
-        logger.warning("[REMOTE] ensure_instance() is disabled in remote mode")
-        return False
+    # =================== Multi-User Methods (Phase 1.2) ===================
+    # Reference: MIGRATION_ROADMAP.md Phase 1.2 - SessionManager Extensions
 
-    def create_instance(self, account: str, nickname: str = "") -> bool:
-        """ไม่ใช้แล้วในระบบ Remote"""
-        logger.warning("[REMOTE] create_instance() is disabled in remote mode")
-        return False
+    def get_accounts_by_user(self, user_id: str) -> List[Dict]:
+        """
+        Get all accounts for a specific user.
 
-    def _create_portable_data_structure(self, instance_path: str):
-        """Create the portable data directory structure"""
+        Per MIGRATION_ROADMAP.md: Must filter by WHERE user_id = ?
+
+        Args:
+            user_id: User ID to filter by
+
+        Returns:
+            List of account dictionaries belonging to the user
+        """
+        # Check online status first
+        self.check_account_online_status()
+
+        with sqlite3.connect(self.db_path) as conn:
+            # Check if user_id column exists
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(accounts)")
+            columns = [col[1] for col in cursor.fetchall()]
+
+            if 'user_id' not in columns:
+                logger.warning("[MULTI_USER] user_id column not found - run migration 001 first")
+                # Fallback: return all accounts (legacy behavior)
+                return self.get_all_accounts()
+
+            rows = conn.execute(
+                """
+                SELECT account, nickname, status, broker, last_seen, created, symbol_received, user_id
+                FROM accounts
+                WHERE user_id = ?
+                ORDER BY created DESC
+                """,
+                (user_id,)
+            ).fetchall()
+
+        accounts = []
+        for row in rows:
+            acc = {
+                'account': row[0],
+                'nickname': row[1] or '',
+                'status': row[2] or 'Wait for Activate',
+                'broker': row[3] or '-',
+                'last_seen': row[4],
+                'created': row[5],
+                'pid': None,
+                'symbol_received': bool(row[6]) if row[6] is not None else False,
+                'user_id': row[7]
+            }
+            accounts.append(acc)
+
+        return accounts
+
+    def assign_account_to_user(self, account: str, user_id: str) -> bool:
+        """
+        Assign an account to a specific user.
+
+        Per MIGRATION_ROADMAP.md Phase 1.2
+
+        Args:
+            account: Account number to assign
+            user_id: User ID to assign to
+
+        Returns:
+            bool: True if assignment succeeded
+        """
         try:
-            data_path = os.path.join(instance_path, "Data")
-            
-            # Create essential directories for portable mode
-            directories = [
-                data_path,
-                os.path.join(data_path, "MQL5"),
-                os.path.join(data_path, "MQL5", "Files"),
-                os.path.join(data_path, "MQL5", "Include"),
-                os.path.join(data_path, "MQL5", "Experts"),
-                os.path.join(data_path, "MQL5", "Indicators"),
-                os.path.join(data_path, "MQL5", "Scripts"),
-                os.path.join(data_path, "config"),
-                os.path.join(data_path, "profiles"),
-                os.path.join(data_path, "bases"),
-                os.path.join(data_path, "logs"),
-            ]
-            
-            for dir_path in directories:
-                os.makedirs(dir_path, exist_ok=True)
-                
-            logger.info(f"[PORTABLE_STRUCTURE] ✓ Created portable data structure in {data_path}")
-            
-        except Exception as e:
-            logger.warning(f"[PORTABLE_STRUCTURE] Failed to create structure: {e}")
-
-    def _copy_user_profile_to_instance(self, instance_path: str):
-        """Copy user profile data to both instance and portable data directory"""
-        try:
-            src = self.profile_source
-            if not src or not os.path.exists(src):
-                logger.info(f"[COPY_PROFILE] Profile source not found or not set: {src}")
-                return
-            
-            # Copy to both locations for compatibility
-            data_path = os.path.join(instance_path, "Data")
-            
-            items = [
-                ("config", "config"),
-                ("profiles", "profiles"),
-                ("MQL5", "MQL5"),
-                ("bases", "bases"),
-            ]
-            
-            for sname, dname in items:
-                sp = os.path.join(src, sname)
-                if not os.path.exists(sp):
-                    continue
-                
-                # Copy to instance root (traditional location)
-                dp_instance = os.path.join(instance_path, dname)
-                # Copy to Data folder (portable location)
-                dp_data = os.path.join(data_path, dname)
-                
-                for dp in [dp_instance, dp_data]:
-                    try:
-                        if os.path.exists(dp):
-                            logger.info(f"[COPY_PROFILE] Merging {sname} -> {dp}")
-                            self._merge_directories(sp, dp)
-                        else:
-                            shutil.copytree(sp, dp, dirs_exist_ok=True)
-                            logger.info(f"[COPY_PROFILE] ✓ Copied {sname} -> {dp}")
-                    except Exception as e:
-                        logger.warning(f"[COPY_PROFILE] Failed to copy {sname} to {dp}: {e}")
-                        
-        except Exception as e:
-            logger.warning(f"[COPY_PROFILE] Error: {e}")
-
-    def _merge_directories(self, src_dir: str, dst_dir: str):
-        for root, dirs, files in os.walk(src_dir):
-            rel = os.path.relpath(root, src_dir)
-            dst_root = dst_dir if rel == "." else os.path.join(dst_dir, rel)
-            os.makedirs(dst_root, exist_ok=True)
-            for f in files:
-                s = os.path.join(root, f)
-                d = os.path.join(dst_root, f)
-                try:
-                    shutil.copy2(s, d)
-                except Exception as e:
-                    logger.debug(f"[MERGE_DIRS] Skip {f}: {e}")
-
-    def start_instance(self, account: str) -> bool:
-        """ไม่ใช้แล้วในระบบ Remote"""
-        logger.warning("[REMOTE] start_instance() is disabled in remote mode")
-        return False
-
-    def stop_instance(self, account: str) -> bool:
-        """ไม่ใช้แล้วในระบบ Remote"""
-        logger.warning("[REMOTE] stop_instance() is disabled in remote mode")
-        return False
-
-    def restart_instance(self, account: str) -> bool:
-        """ไม่ใช้แล้วในระบบ Remote"""
-        logger.warning("[REMOTE] restart_instance() is disabled in remote mode")
-        return False
-
-    def delete_instance(self, account: str) -> bool:
-        try:
-            self.stop_instance(account)
-            inst = self.get_instance_path(account)
-            if os.path.exists(inst):
-                shutil.rmtree(inst, ignore_errors=True)
             with sqlite3.connect(self.db_path) as conn:
-                conn.execute("DELETE FROM accounts WHERE account = ?", (account,))
+                # Check if user_id column exists
+                cursor = conn.cursor()
+                cursor.execute("PRAGMA table_info(accounts)")
+                columns = [col[1] for col in cursor.fetchall()]
+
+                if 'user_id' not in columns:
+                    logger.error("[MULTI_USER] user_id column not found - run migration 001 first")
+                    return False
+
+                conn.execute(
+                    "UPDATE accounts SET user_id = ? WHERE account = ?",
+                    (user_id, account)
+                )
                 conn.commit()
+
+            logger.info(f"[MULTI_USER] Assigned account {account} to user {user_id}")
             return True
+
         except Exception as e:
-            logger.error(f"[DELETE_INSTANCE] Failed for {account}: {e}")
+            logger.error(f"[MULTI_USER] Failed to assign account: {e}")
             return False
 
-    def focus_instance(self, account: str) -> bool:
+    def remove_user_accounts(self, user_id: str) -> bool:
+        """
+        Remove all accounts for a user (for deletion/cleanup).
+
+        Per MIGRATION_ROADMAP.md Phase 1.2
+
+        Args:
+            user_id: User ID whose accounts should be removed
+
+        Returns:
+            bool: True if removal succeeded
+        """
         try:
-            import pygetwindow as gw  # optional
-        except Exception:
-            logger.info("[FOCUS] pygetwindow not available; skipping focus.")
-            return False
-        try:
-            wins = [w for w in gw.getAllTitles() if "meta" in w.lower() or "trader" in w.lower()]
-            if wins:
-                win = gw.getWindowsWithTitle(wins[0])[0]
-                win.activate()
-                return True
+            with sqlite3.connect(self.db_path) as conn:
+                # Check if user_id column exists
+                cursor = conn.cursor()
+                cursor.execute("PRAGMA table_info(accounts)")
+                columns = [col[1] for col in cursor.fetchall()]
+
+                if 'user_id' not in columns:
+                    logger.error("[MULTI_USER] user_id column not found - run migration 001 first")
+                    return False
+
+                # Get count before deletion
+                cursor.execute(
+                    "SELECT COUNT(*) FROM accounts WHERE user_id = ?",
+                    (user_id,)
+                )
+                count = cursor.fetchone()[0]
+
+                # Delete accounts
+                conn.execute(
+                    "DELETE FROM accounts WHERE user_id = ?",
+                    (user_id,)
+                )
+                conn.commit()
+
+            logger.info(f"[MULTI_USER] Removed {count} accounts for user {user_id}")
+            return True
+
         except Exception as e:
-            logger.debug(f"[FOCUS] Unable to focus window: {e}")
-        return False
+            logger.error(f"[MULTI_USER] Failed to remove user accounts: {e}")
+            return False
+
+    def get_account_owner(self, account: str) -> Optional[str]:
+        """
+        Get the user_id who owns this account.
+
+        Args:
+            account: Account number
+
+        Returns:
+            str: User ID or None if not found
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                # Check if user_id column exists
+                cursor = conn.cursor()
+                cursor.execute("PRAGMA table_info(accounts)")
+                columns = [col[1] for col in cursor.fetchall()]
+
+                if 'user_id' not in columns:
+                    return None
+
+                row = conn.execute(
+                    "SELECT user_id FROM accounts WHERE account = ?",
+                    (account,)
+                ).fetchone()
+
+                return row[0] if row else None
+
+        except Exception as e:
+            logger.error(f"[MULTI_USER] Failed to get account owner: {e}")
+            return None
+
+    def add_remote_account_with_user(self, account: str, nickname: str = "", user_id: str = None) -> bool:
+        """
+        Add a remote account with user assignment.
+
+        Extended version of add_remote_account for multi-user support.
+
+        Args:
+            account: Account number
+            nickname: Account nickname
+            user_id: User ID to assign (optional)
+
+        Returns:
+            bool: True if account was added successfully
+        """
+        try:
+            if self.account_exists(account):
+                logger.info(f"[REMOTE] Account {account} already exists")
+                return False
+
+            with sqlite3.connect(self.db_path) as conn:
+                # Check if user_id column exists
+                cursor = conn.cursor()
+                cursor.execute("PRAGMA table_info(accounts)")
+                columns = [col[1] for col in cursor.fetchall()]
+
+                if 'user_id' in columns and user_id:
+                    conn.execute(
+                        """
+                        INSERT INTO accounts
+                        (account, nickname, status, created, user_id)
+                        VALUES (?, ?, 'Wait for Activate', ?, ?)
+                        """,
+                        (account, nickname, datetime.now().isoformat(), user_id)
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO accounts
+                        (account, nickname, status, created)
+                        VALUES (?, ?, 'Wait for Activate', ?)
+                        """,
+                        (account, nickname, datetime.now().isoformat())
+                    )
+                conn.commit()
+
+            logger.info(f"[REMOTE] Account {account} added (user: {user_id or 'none'})")
+            return True
+
+        except Exception as e:
+            logger.error(f"[REMOTE_ADD_ERROR] {e}")
+            return False

@@ -1,13 +1,20 @@
 """
 Webhook Routes
 Handles webhook endpoints for receiving trading signals
+
+Updated for Multi-User SaaS:
+- Per-user webhook tokens from user_tokens table
+- Legacy WEBHOOK_TOKEN supported for backward compatibility
+- /webhook-url now requires auth and returns user-specific URL
+
+Reference: MIGRATION_ROADMAP.md Phase 3.1
 """
 import os
 import json
 import re
 import logging
 from datetime import datetime
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
@@ -26,7 +33,10 @@ limiter = None
 account_allowlist_service = None
 
 EXTERNAL_BASE_URL = os.getenv('EXTERNAL_BASE_URL', 'http://localhost:5000')
-WEBHOOK_TOKEN = os.getenv('WEBHOOK_TOKEN', 'default-token')
+
+# Legacy token - only used for backward compatibility during migration
+# In Multi-User SaaS, each user gets their own token stored in user_tokens table
+LEGACY_WEBHOOK_TOKEN = os.getenv('WEBHOOK_TOKEN', '')
 
 
 def init_webhook_routes(ws, sm, st, eh, sls, lim, aas):
@@ -56,8 +66,52 @@ def init_webhook_routes(ws, sm, st, eh, sls, lim, aas):
 
 @webhook_bp.route('/webhook-url', methods=['GET'])
 def get_webhook_url():
-    """Get webhook URL with token (public endpoint - no auth required)"""
-    return jsonify({'url': f"{EXTERNAL_BASE_URL}/webhook/{WEBHOOK_TOKEN}"})
+    """
+    Get webhook URL for the current user (Multi-User SaaS).
+
+    In Multi-User mode:
+    - Requires authentication
+    - Returns user-specific webhook URL from user_tokens table
+
+    In Legacy mode (no user logged in):
+    - Returns legacy WEBHOOK_TOKEN URL if configured
+
+    Reference: MIGRATION_ROADMAP.md Phase 3.1
+    """
+    from app.middleware.auth import get_current_user_id
+
+    user_id = get_current_user_id()
+
+    if user_id:
+        # Multi-User SaaS: Return user-specific webhook URL
+        try:
+            from app.services.token_service import TokenService
+            token_service = TokenService()
+            webhook_url = token_service.get_webhook_url(user_id)
+
+            if webhook_url:
+                return jsonify({'url': webhook_url, 'user_id': user_id})
+            else:
+                # Generate new token for user
+                token = token_service.generate_webhook_token(user_id)
+                webhook_url = f"{EXTERNAL_BASE_URL}/webhook/{token}"
+                return jsonify({'url': webhook_url, 'user_id': user_id})
+        except Exception as e:
+            logger.error(f"[WEBHOOK_URL] Error getting user webhook: {e}")
+            return jsonify({'error': 'Failed to get webhook URL'}), 500
+
+    # Legacy fallback: Return global WEBHOOK_TOKEN URL if configured
+    if LEGACY_WEBHOOK_TOKEN:
+        return jsonify({
+            'url': f"{EXTERNAL_BASE_URL}/webhook/{LEGACY_WEBHOOK_TOKEN}",
+            'mode': 'legacy',
+            'note': 'Login with Google to get your personal webhook URL'
+        })
+
+    return jsonify({
+        'error': 'Not authenticated',
+        'note': 'Login with Google to get your personal webhook URL'
+    }), 401
 
 
 
@@ -88,20 +142,46 @@ def webhook_health():
 @webhook_bp.route('/webhook/<token>', methods=['POST'])
 def webhook_handler(token):
     """
-    Main webhook handler - receives trading signals from external sources
+    Main webhook handler - receives trading signals from external sources.
+
+    Multi-User SaaS Token Validation:
+    1. First, check if token matches a user in user_tokens table
+    2. If found, only process for that user's accounts
+    3. If not found, check legacy WEBHOOK_TOKEN for backward compatibility
+    4. If neither match, return 401 Unauthorized
 
     Args:
         token: Webhook authentication token (from URL)
+
+    Reference: MIGRATION_ROADMAP.md Phase 3.1
     """
     # Apply rate limit
     limiter.limit("10 per minute")(lambda: None)()
 
-    # 1. Token validation
-    if token != WEBHOOK_TOKEN:
-        logger.warning("[UNAUTHORIZED] invalid webhook token")
-        system_logs_service.add_log('error', '🔒 [401] Webhook unauthorized - Invalid token')
-        email_handler.send_alert("Unauthorized Webhook Access", "Invalid token")
-        return jsonify({'error': 'Unauthorized'}), 401
+    # 1. Token validation - Multi-User SaaS first, then legacy fallback
+    user_id = None
+
+    # Try to find user by webhook token (Multi-User SaaS)
+    try:
+        from app.services.token_service import TokenService
+        token_service = TokenService()
+        user_id = token_service.get_user_by_webhook_token(token)
+
+        if user_id:
+            logger.info(f"[WEBHOOK] Token validated for user: {user_id}")
+    except Exception as e:
+        logger.debug(f"[WEBHOOK] Token service lookup failed: {e}")
+
+    # Legacy fallback: Check against WEBHOOK_TOKEN env var
+    if not user_id:
+        if LEGACY_WEBHOOK_TOKEN and token == LEGACY_WEBHOOK_TOKEN:
+            user_id = 'admin_001'  # Default admin for legacy tokens
+            logger.info(f"[WEBHOOK] Legacy token validated, using admin user")
+        else:
+            logger.warning("[UNAUTHORIZED] invalid webhook token")
+            system_logs_service.add_log('error', '🔒 [401] Webhook unauthorized - Invalid token')
+            email_handler.send_alert("Unauthorized Webhook Access", "Invalid token")
+            return jsonify({'error': 'Unauthorized'}), 401
 
     # 2. JSON parsing with error recovery
     try:

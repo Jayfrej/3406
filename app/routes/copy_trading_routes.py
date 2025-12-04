@@ -56,13 +56,28 @@ def init_copy_trading_routes(cm, ch, ce, chand, sm, sls, lim):
 @copy_trading_bp.route('/api/pairs', methods=['GET'])
 @require_auth
 def list_pairs():
-    """ดึงรายการ Copy Pairs ทั้งหมด (ใช้ตอนรีเฟรชหน้า)"""
+    """ดึงรายการ Copy Pairs ของ user ปัจจุบัน (Multi-User SaaS)"""
     try:
-        # รองรับทั้ง list_pairs() และ get_all_pairs()
-        if hasattr(copy_manager, 'list_pairs'):
-            pairs = copy_manager.list_pairs()
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
+        user_id = get_current_user_id()
+
+        # If user_id exists, filter by user (multi-user mode)
+        if user_id and hasattr(copy_manager, 'get_pairs_by_user'):
+            # Check if user is admin - admins see all pairs
+            is_admin = session.get('is_admin', False)
+            if is_admin:
+                pairs = copy_manager.get_all_pairs()
+            else:
+                pairs = copy_manager.get_pairs_by_user(user_id)
         else:
-            pairs = copy_manager.get_all_pairs()
+            # Fallback for legacy mode
+            if hasattr(copy_manager, 'list_pairs'):
+                pairs = copy_manager.list_pairs()
+            else:
+                pairs = copy_manager.get_all_pairs()
+
         return jsonify({'pairs': pairs}), 200
     except Exception as e:
         logger.exception('[PAIRS_LIST_ERROR]')
@@ -72,8 +87,10 @@ def list_pairs():
 @copy_trading_bp.route('/api/pairs', methods=['POST'])
 @require_auth
 def create_copy_pair():
-    """สร้าง Copy Pair ใหม่"""
+    """สร้าง Copy Pair ใหม่ (พร้อม user_id สำหรับ Multi-User SaaS)"""
     try:
+        from app.middleware.auth import get_current_user_id
+
         data = request.get_json() or {}
 
         master = str(data.get('master_account', '')).strip()
@@ -98,15 +115,29 @@ def create_copy_pair():
         slave_nickname = str(data.get('slave_nickname', '')).strip()
         settings = data.get('settings', {})
 
-        pair = copy_manager.create_pair(
-            master_account=master,
-            slave_account=slave,
-            settings=settings,
-            master_nickname=master_nickname,
-            slave_nickname=slave_nickname
-        )
+        # Get current user_id for assignment (Multi-User SaaS)
+        user_id = get_current_user_id()
 
-        logger.info(f"[API] Created copy pair: {master} -> {slave}")
+        # Use user-aware method if available
+        if hasattr(copy_manager, 'create_pair_for_user') and user_id:
+            pair = copy_manager.create_pair_for_user(
+                user_id=user_id,
+                master_account=master,
+                slave_account=slave,
+                settings=settings,
+                master_nickname=master_nickname,
+                slave_nickname=slave_nickname
+            )
+        else:
+            pair = copy_manager.create_pair(
+                master_account=master,
+                slave_account=slave,
+                settings=settings,
+                master_nickname=master_nickname,
+                slave_nickname=slave_nickname
+            )
+
+        logger.info(f"[API] Created copy pair: {master} -> {slave} (user: {user_id})")
         system_logs_service.add_log('success', f'✅ [201] Copy pair created: {master} → {slave} ({master_nickname} → {slave_nickname})')
         return jsonify({'success': True, 'pair': pair}), 201
 
@@ -118,8 +149,20 @@ def create_copy_pair():
 @copy_trading_bp.route('/api/pairs/<pair_id>', methods=['PUT'])
 @require_auth
 def update_copy_pair(pair_id):
-    """อัพเดต Copy Pair"""
+    """อัพเดต Copy Pair (with ownership validation for Multi-User SaaS)"""
     try:
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
+        # Multi-User SaaS: Validate ownership before update
+        user_id = get_current_user_id()
+        is_admin = session.get('is_admin', False)
+
+        if user_id and hasattr(copy_manager, 'validate_pair_ownership') and not is_admin:
+            if not copy_manager.validate_pair_ownership(pair_id, user_id):
+                logger.warning(f"[PAIR_UPDATE] Access denied: user {user_id} tried to update pair {pair_id}")
+                return jsonify({'error': 'Access denied - you do not own this pair'}), 403
+
         data = request.get_json() or {}
         success = copy_manager.update_pair(pair_id, data)
 
@@ -141,15 +184,27 @@ def update_copy_pair(pair_id):
 @copy_trading_bp.route('/api/pairs/<pair_id>', methods=['DELETE'])
 @require_auth
 def delete_pair(pair_id):
-    """ลบ Copy Pair + log + save"""
+    """ลบ Copy Pair + log + save (with ownership validation for Multi-User SaaS)"""
     try:
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
+        # Multi-User SaaS: Validate ownership before deletion
+        user_id = get_current_user_id()
+        is_admin = session.get('is_admin', False)
+
+        if user_id and hasattr(copy_manager, 'validate_pair_ownership') and not is_admin:
+            if not copy_manager.validate_pair_ownership(pair_id, user_id):
+                logger.warning(f"[PAIR_DELETE] Access denied: user {user_id} tried to delete pair {pair_id}")
+                return jsonify({'ok': False, 'error': 'Access denied - you do not own this pair'}), 403
+
         deleted = copy_manager.delete_pair(pair_id)
         if not deleted:
             logger.warning(f'[PAIR_DELETE_NOT_FOUND] {pair_id}')
             system_logs_service.add_log('warning', f'⚠️ [404] Copy pair deletion failed - Pair {pair_id} not found')
             return jsonify({'ok': False, 'error': 'Pair not found'}), 404
 
-        logger.info(f'[PAIR_DELETE] {pair_id}')
+        logger.info(f'[PAIR_DELETE] {pair_id} by_user={user_id}')
         system_logs_service.add_log('warning', f'🗑️ [200] Copy pair deleted: {pair_id}')
         return jsonify({'ok': True}), 200
     except Exception as e:
@@ -160,8 +215,20 @@ def delete_pair(pair_id):
 @copy_trading_bp.route('/api/pairs/<pair_id>/toggle', methods=['POST'])
 @require_auth
 def toggle_copy_pair(pair_id):
-    """เปิด/ปิด Copy Pair"""
+    """เปิด/ปิด Copy Pair (with ownership validation for Multi-User SaaS)"""
     try:
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
+        # Multi-User SaaS: Validate ownership before toggle
+        user_id = get_current_user_id()
+        is_admin = session.get('is_admin', False)
+
+        if user_id and hasattr(copy_manager, 'validate_pair_ownership') and not is_admin:
+            if not copy_manager.validate_pair_ownership(pair_id, user_id):
+                logger.warning(f"[PAIR_TOGGLE] Access denied: user {user_id} tried to toggle pair {pair_id}")
+                return jsonify({'error': 'Access denied - you do not own this pair'}), 403
+
         new_status = copy_manager.toggle_pair_status(pair_id)
 
         if new_status:

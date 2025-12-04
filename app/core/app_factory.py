@@ -165,6 +165,9 @@ def create_app():
     # Import EA API routes
     from app.routes.ea_api_routes import ea_api_bp, init_ea_api_routes
 
+    # Import auth routes (Multi-User SaaS)
+    from app.routes.auth_routes import auth_bp
+
     # Import trades blueprint
     from app.trades import trades_bp
 
@@ -244,6 +247,7 @@ def create_app():
     logger.info("[APP_FACTORY] Routes initialized")
 
     # =================== Register Blueprints ===================
+    app.register_blueprint(auth_bp)  # Auth routes first (Google OAuth)
     app.register_blueprint(webhook_bp)
     app.register_blueprint(account_bp)
     app.register_blueprint(copy_trading_bp)
