@@ -54,10 +54,11 @@ def create_app():
     })
 
     # Initialize rate limiter with custom key function
+    # Higher limits for EA polling (polls every 1 second = 3600/hour)
     limiter = Limiter(
         app=app,
         key_func=get_rate_limit_key,
-        default_limits=["10000 per day", "1000 per hour"],
+        default_limits=["50000 per day", "10000 per hour"],  # ← เพิ่มจาก 1000 → 10000 per hour
         storage_uri="memory://"
     )
 
