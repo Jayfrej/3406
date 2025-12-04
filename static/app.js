@@ -1394,6 +1394,7 @@ async loadData() {
       await this.loadCopyPairs();
       await this.loadMasterAccounts();
       await this.loadSlaveAccounts();
+      await this.loadCopyHistory();  // ← เพิ่มบรรทัดนี้เพื่อ refresh history
 
       // Render UI
       this.renderMasterAccounts();
@@ -1428,6 +1429,7 @@ async loadData() {
       await this.loadCopyPairs();
       await this.loadMasterAccounts();
       await this.loadSlaveAccounts();
+      await this.loadCopyHistory();  // ← เพิ่มบรรทัดนี้เพื่อ refresh history
 
       // Render UI
       this.renderMasterAccounts();
