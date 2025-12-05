@@ -57,9 +57,24 @@ def ensure_database_schema() -> bool:
                 is_active INTEGER DEFAULT 1,
                 is_admin INTEGER DEFAULT 0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                last_login TEXT
+                last_login TEXT,
+                license_key TEXT UNIQUE,
+                webhook_secret TEXT UNIQUE
             )
         ''')
+
+        # Ensure license_key and webhook_secret columns exist (for legacy databases)
+        cursor.execute("PRAGMA table_info(users)")
+        user_columns = [col[1] for col in cursor.fetchall()]
+
+        if 'license_key' not in user_columns:
+            cursor.execute('ALTER TABLE users ADD COLUMN license_key TEXT UNIQUE')
+            logger.info("[DB_INIT] Added 'license_key' column to users")
+
+        if 'webhook_secret' not in user_columns:
+            cursor.execute('ALTER TABLE users ADD COLUMN webhook_secret TEXT UNIQUE')
+            logger.info("[DB_INIT] Added 'webhook_secret' column to users")
+
         logger.debug("[DB_INIT] ✓ Table 'users' ready")
 
         # ========================================

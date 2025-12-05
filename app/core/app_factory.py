@@ -150,10 +150,13 @@ def create_app():
     from app.services.account_allowlist_service import AccountAllowlistService
     from app.services.webhook_service import WebhookService
     from app.services.settings_service import SettingsService
+    from app.services.user_service import UserService  # Domain + License Key system
 
     # Initialize services
     system_logs_service = SystemLogsService()
     account_allowlist_service = AccountAllowlistService()
+    user_service = UserService()  # License key management
+    logger.info("[APP_FACTORY] UserService initialized (License Key support)")
 
     # Helper function for recording trades (used by webhook)
     from app.trades import record_and_broadcast
@@ -179,6 +182,8 @@ def create_app():
     from app.routes.system_routes import system_bp, init_system_routes, register_error_handlers
     from app.routes.broker_balance_routes import broker_balance_bp, init_broker_balance_routes
     from app.routes.command_routes import command_bp, init_command_routes
+    from app.routes.user_routes import user_bp, init_user_routes  # License key API
+    from app.routes.unified_routes import unified_bp, init_unified_routes  # Domain + License Key
 
     # Import EA API routes
     from app.routes.ea_api_routes import ea_api_bp, init_ea_api_routes
@@ -262,7 +267,22 @@ def create_app():
         lim=limiter
     )
 
-    logger.info("[APP_FACTORY] Routes initialized")
+    # Initialize User routes (License Key management)
+    init_user_routes(
+        us=user_service,
+        sls=system_logs_service
+    )
+
+    # Initialize Unified routes (Domain + License Key webhook)
+    init_unified_routes(
+        us=user_service,
+        sm=session_manager,
+        ws=webhook_service,
+        sls=system_logs_service,
+        lim=limiter
+    )
+
+    logger.info("[APP_FACTORY] Routes initialized (including unified endpoint)")
 
     # =================== Register Blueprints ===================
     app.register_blueprint(auth_bp)  # Auth routes first (Google OAuth)
@@ -275,12 +295,17 @@ def create_app():
     app.register_blueprint(command_bp)
     app.register_blueprint(ea_api_bp)
     app.register_blueprint(trades_bp)
+    app.register_blueprint(user_bp)  # License Key API routes
 
-    # Register UI routes last (so API routes take precedence)
+    # Register UI routes (so API routes take precedence)
     from app.routes.ui_routes import ui_bp
     app.register_blueprint(ui_bp)
 
-    logger.info("[APP_FACTORY] Blueprints registered")
+    # Register unified endpoint LAST (catch-all route /<license_key>)
+    # This must be last to avoid conflicts with other routes
+    app.register_blueprint(unified_bp)
+
+    logger.info("[APP_FACTORY] Blueprints registered (unified endpoint last)")
 
     # Debug: Log all registered routes
     logger.info("[APP_FACTORY] Registered routes:")

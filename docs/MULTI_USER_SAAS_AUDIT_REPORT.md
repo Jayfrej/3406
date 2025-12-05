@@ -1,21 +1,95 @@
 # 🔍 Multi-User SaaS Audit Report
 
-**Date:** 2025-12-05  
+**Date:** 2025-12-05 (Updated)  
 **Auditor:** AI Code Review System  
-**Status:** ✅ READY FOR FINAL TEST RUN
+**Status:** ✅ READY FOR PRODUCTION
 
 ---
 
 ## Executive Summary
 
-The MT5 Trading Bot has been audited for Multi-User SaaS deployment readiness. **All critical components are in place and functional.**
+The MT5 Trading Bot has been audited for Multi-User SaaS deployment readiness. **All critical components are in place and functional, including Per-User Secret Key security.**
 
 | Area | Status | Notes |
 |------|--------|-------|
 | Backend & Database | ✅ Ready | Data isolation working |
 | Authentication | ✅ Ready | Google OAuth integrated |
+| **Per-User Secret Key** | ✅ Ready | **NEW: 2-layer security** |
 | Legacy Cleanup | ✅ Cleaned | WEBHOOK_TOKEN removed from setup.py |
 | Frontend | ✅ Ready | Login/Dashboard properly linked |
+
+---
+
+## 🔐 NEW: Per-User Secret Key Security
+
+### Security Architecture (2-Layer)
+
+```
+Request Flow:
+┌─────────────────────────────────────────────────────────────────┐
+│  TradingView / MT5 EA                                           │
+│         │                                                       │
+│         ▼                                                       │
+│  POST https://domain.com/whk_abc123...                          │
+│  Body: {"secret": "whs_xyz789...", "action": "BUY", ...}       │
+│         │                                                       │
+│         ▼                                                       │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ Layer 1: License Key Validation                         │   │
+│  │ - Extract from URL: whk_abc123...                       │   │
+│  │ - Lookup user in database                               │   │
+│  │ - If not found → 401 Unauthorized                       │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│         │                                                       │
+│         ▼                                                       │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ Layer 2: Per-User Secret Validation                     │   │
+│  │ - Extract from body: whs_xyz789...                      │   │
+│  │ - Compare with user's webhook_secret                    │   │
+│  │ - If mismatch → 403 Forbidden                          │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│         │                                                       │
+│         ▼                                                       │
+│  ✅ AUTHENTICATED - Process request with user isolation        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Database Schema Updates
+
+```sql
+-- users table now has:
+CREATE TABLE users (
+    user_id TEXT PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL,
+    name TEXT,
+    picture TEXT,
+    is_active INTEGER DEFAULT 1,
+    is_admin INTEGER DEFAULT 0,
+    created_at TEXT,
+    last_login TEXT,
+    license_key TEXT UNIQUE,      -- For URL identification
+    webhook_secret TEXT UNIQUE    -- For request validation
+);
+```
+
+### API Endpoints for Credentials
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/user/credentials` | GET | Get license_key + webhook_secret |
+| `/api/user/license-key` | GET | Get license_key only |
+| `/api/user/license-key/regenerate` | POST | Generate new license_key |
+| `/api/user/webhook-secret/regenerate` | POST | Generate new webhook_secret |
+
+### Security Test Results
+
+```
+✅ PASS: secret_generation - Secrets are unique and properly formatted
+✅ PASS: secret_validation - Invalid secrets correctly rejected
+✅ PASS: user_isolation - User A cannot use User B's secret
+✅ PASS: database_schema - All required columns exist
+```
 
 ---
 

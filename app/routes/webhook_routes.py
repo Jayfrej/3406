@@ -441,3 +441,165 @@ def webhook_handler(token):
         system_logs_service.add_log('error', f'❌ [500] Webhook processing failed: {error_msg[:80]}')
         return jsonify({'error': result.get('error', 'Processing failed')}), 500
 
+
+# =================== UNIFIED ENDPOINT ===================
+# New: Domain + License Key routing
+# URL Format: https://domain.com/<license_key>
+# Supports both TradingView webhooks and MT5 EA heartbeats/commands
+
+def _detect_request_type(data: dict) -> str:
+    """
+    Detect type of incoming request.
+
+    Returns:
+        'heartbeat' | 'command_poll' | 'trading_signal' | 'unknown'
+    """
+    # EA Heartbeat: has account, broker, symbol but no action
+    if 'account' in data and 'broker' in data and 'symbol' in data and 'action' not in data:
+        return 'heartbeat'
+
+    # EA Command Poll: has account and command_type='poll'
+    if 'account' in data and data.get('command_type') == 'poll':
+        return 'command_poll'
+
+    # Trading Signal: has action (BUY, SELL, etc.)
+    if 'action' in data:
+        return 'trading_signal'
+
+    return 'unknown'
+
+
+def _handle_ea_heartbeat(user_id: str, user_email: str, data: dict):
+    """
+    Handle EA heartbeat - EA reports it's online.
+    """
+    account = str(data.get('account', '')).strip()
+    broker = data.get('broker', '-')
+    symbol = data.get('symbol', '-')
+
+    if not account:
+        return jsonify({'error': 'Account number required'}), 400
+
+    # Get user's accounts
+    from app.services.user_service import UserService
+    user_svc = UserService()
+    user_accounts = user_svc.get_user_accounts_list(user_id)
+
+    if account not in user_accounts:
+        # Auto-add new account for this user
+        if hasattr(session_manager, 'add_remote_account_with_user'):
+            session_manager.add_remote_account_with_user(account, f"Account {account}", user_id)
+            logger.info(f"[HEARTBEAT] ✅ Auto-added account {account} for user {user_email}")
+        else:
+            session_manager.add_remote_account(account, f"Account {account}")
+
+    # Update account heartbeat
+    session_manager.update_account_heartbeat(account)
+
+    logger.info(f"[HEARTBEAT] ✅ {user_email} → Account {account} is online")
+
+    return jsonify({
+        'success': True,
+        'message': 'Heartbeat received',
+        'account': account,
+        'status': 'Online'
+    })
+
+
+def _handle_ea_command_poll(user_id: str, user_email: str, data: dict):
+    """
+    Handle EA command polling - EA asks for pending commands.
+    """
+    account = str(data.get('account', '')).strip()
+
+    if not account:
+        return jsonify({'error': 'Account number required'}), 400
+
+    # Verify account belongs to user
+    from app.services.user_service import UserService
+    user_svc = UserService()
+    user_accounts = user_svc.get_user_accounts_list(user_id)
+
+    if account not in user_accounts:
+        return jsonify({'error': 'Unauthorized account'}), 403
+
+    # Get pending command
+    command = None
+    if hasattr(session_manager, 'get_pending_command'):
+        command = session_manager.get_pending_command(account)
+
+    if command:
+        logger.info(f"[COMMAND_POLL] Sending command to {account}: {command.get('action')}")
+        return jsonify({
+            'success': True,
+            'has_command': True,
+            'command': command
+        })
+    else:
+        return jsonify({
+            'success': True,
+            'has_command': False
+        })
+
+
+def _handle_trading_signal_unified(user_id: str, user_email: str, data: dict):
+    """
+    Handle trading signal from TradingView or other sources.
+    """
+    action = str(data.get('action', '')).upper()
+    symbol = data.get('symbol', '-')
+    volume = data.get('volume', '-')
+
+    logger.info(f"[TRADING_SIGNAL] {user_email} → {action} {symbol} Vol:{volume}")
+    system_logs_service.add_log('info', f'📡 Signal: {action} {symbol} from {user_email}', user_id=user_id)
+
+    # Get user's accounts
+    from app.services.user_service import UserService
+    user_svc = UserService()
+    user_accounts = user_svc.get_user_accounts_list(user_id)
+
+    if not user_accounts:
+        return jsonify({'error': 'No accounts found. Please add accounts first.'}), 400
+
+    # Determine target accounts
+    if 'account_number' in data:
+        target_account = str(data['account_number']).strip()
+        if target_account not in user_accounts:
+            return jsonify({'error': f'Unauthorized account: {target_account}'}), 403
+        target_accounts = [target_account]
+    elif 'accounts' in data:
+        requested = [str(a).strip() for a in data['accounts']]
+        target_accounts = [a for a in requested if a in user_accounts]
+        if not target_accounts:
+            return jsonify({'error': 'No authorized accounts in request'}), 403
+    else:
+        target_accounts = user_accounts
+
+    # Validate payload
+    valid = webhook_service.validate_webhook_payload(data)
+    if not valid.get("valid"):
+        return jsonify({'error': valid.get('error')}), 400
+
+    # Process signal
+    data_processed = dict(data)
+    data_processed['accounts'] = target_accounts
+
+    result = webhook_service.process_webhook(data_processed)
+
+    if result.get('success'):
+        system_logs_service.add_log(
+            'success',
+            f'✅ Signal processed: {action} {symbol} → {len(target_accounts)} account(s)',
+            user_id=user_id,
+            accounts=target_accounts
+        )
+        return jsonify({
+            'success': True,
+            'message': f'Signal sent to {len(target_accounts)} account(s)',
+            'accounts': target_accounts
+        })
+    else:
+        error_msg = result.get('error', 'Unknown error')
+        system_logs_service.add_log('error', f'❌ Signal failed: {error_msg[:80]}', user_id=user_id)
+        return jsonify({'error': error_msg}), 500
+
