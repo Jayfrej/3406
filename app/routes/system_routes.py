@@ -40,10 +40,10 @@ def init_system_routes(sls, sm):
 @require_auth
 def get_system_logs():
     """
-    ดึง system logs (Admin Only for Multi-User SaaS)
+    ดึง system logs (Multi-User SaaS: filtered by user's accounts)
 
-    System logs contain cross-user information and should only be visible to admins.
-    Regular users will receive an empty log list.
+    Users see only logs related to their own accounts.
+    Admins see all logs.
     """
     try:
         from flask import session
@@ -52,19 +52,28 @@ def get_system_logs():
         user_id = get_current_user_id()
         is_admin = session.get('is_admin', False)
 
-        # Only admins can see system logs (contains cross-user data)
-        if not is_admin:
-            return jsonify({
-                'success': True,
-                'logs': [],
-                'total': 0,
-                'message': 'System logs are admin-only'
-            }), 200
-
         limit = int(request.args.get('limit', 300))
         limit = max(1, min(limit, 300))
 
-        logs = system_logs_service.get_logs(limit=limit)
+        if is_admin:
+            # Admins see all logs
+            logs = system_logs_service.get_logs(limit=limit)
+        else:
+            # Get user's accounts for filtering
+            user_accounts = set()
+            try:
+                from app.services.account_allowlist_service import AccountAllowlistService
+                allowlist_service = AccountAllowlistService()
+                user_webhook_accounts = allowlist_service.get_webhook_allowlist_by_user(user_id)
+                user_accounts = set(str(a.get('account', '')) for a in user_webhook_accounts)
+            except Exception as e:
+                logger.warning(f"[SYSTEM_LOGS] Failed to get user accounts: {e}")
+
+            logs = system_logs_service.get_logs_by_user(
+                user_id=user_id,
+                user_accounts=user_accounts,
+                limit=limit
+            )
 
         return jsonify({
             'success': True,
@@ -80,17 +89,22 @@ def get_system_logs():
 @system_bp.route('/api/system/logs/clear', methods=['POST'])
 @require_auth
 def clear_system_logs():
-    """ล้าง system logs ทั้งหมด (Admin Only)"""
+    """ล้าง system logs (Users clear only their own logs, Admins clear all)"""
     try:
         from flask import session
+        from app.middleware.auth import get_current_user_id
 
+        user_id = get_current_user_id()
         is_admin = session.get('is_admin', False)
-        if not is_admin:
-            return jsonify({'error': 'Admin access required'}), 403
 
-        system_logs_service.clear_logs()
+        if is_admin:
+            # Admin clears all logs
+            system_logs_service.clear_logs()
+        else:
+            # User clears only their own logs
+            system_logs_service.clear_logs(user_id=user_id)
 
-        system_logs_service.add_log('info', 'System logs cleared')
+        system_logs_service.add_log('info', 'System logs cleared', user_id=user_id)
 
         return jsonify({'success': True}), 200
     except Exception as e:

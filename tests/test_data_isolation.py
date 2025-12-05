@@ -125,6 +125,54 @@ def test_copy_history_isolation():
     return True
 
 
+def test_system_logs_isolation():
+    """Test that SystemLogsService filters by user_id/accounts"""
+    print("\n📋 Test: System Logs Isolation")
+    print("-" * 40)
+
+    from app.services.system_logs_service import SystemLogsService
+
+    logs_service = SystemLogsService()
+
+    # Add test logs
+    logs_service.add_log('info', 'User A action on account 111', user_id='user_a', accounts=['111'])
+    logs_service.add_log('success', 'User B trade on account 333', user_id='user_b', accounts=['333'])
+    logs_service.add_log('warning', 'System warning', user_id=None, accounts=[])
+
+    # Test filtering
+    user_a_accounts = {'111', '222'}
+    user_b_accounts = {'333', '444'}
+
+    user_a_logs = logs_service.get_logs_by_user('user_a', user_a_accounts)
+    user_b_logs = logs_service.get_logs_by_user('user_b', user_b_accounts)
+    all_logs = logs_service.get_logs()
+
+    print(f"   All logs (admin): {len(all_logs)}")
+    print(f"   User A logs: {len(user_a_logs)}")
+    print(f"   User B logs: {len(user_b_logs)}")
+
+    # Check User A doesn't see User B's logs
+    for log in user_a_logs:
+        if log.get('user_id') == 'user_b':
+            print("   ❌ FAIL: User A sees User B's logs")
+            return False
+        if '333' in log.get('accounts', []):
+            print("   ❌ FAIL: User A sees account 333 logs")
+            return False
+
+    # Check User B doesn't see User A's logs
+    for log in user_b_logs:
+        if log.get('user_id') == 'user_a':
+            print("   ❌ FAIL: User B sees User A's logs")
+            return False
+        if '111' in log.get('accounts', []):
+            print("   ❌ FAIL: User B sees account 111 logs")
+            return False
+
+    print("   ✅ PASS: System logs isolation working")
+    return True
+
+
 def main():
     print("=" * 60)
     print("🔐 Multi-User Data Isolation Tests")
@@ -134,6 +182,7 @@ def main():
 
     results['account_allowlist'] = test_account_allowlist_isolation()
     results['copy_history'] = test_copy_history_isolation()
+    results['system_logs'] = test_system_logs_isolation()
 
     print("\n" + "=" * 60)
     print("📊 Test Summary")
