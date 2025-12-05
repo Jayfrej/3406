@@ -1105,14 +1105,15 @@ def update_account_balance(license_key: str):
         from app.account_balance import AccountBalanceManager
         balance_manager = AccountBalanceManager()
 
-        if hasattr(balance_manager, 'update_balance'):
-            balance_manager.update_balance(account, balance_data)
-        elif hasattr(balance_manager, 'set_balance'):
-            balance_manager.set_balance(account, balance_data)
-        else:
-            # Fallback - store in session manager
-            if hasattr(session_manager, 'update_account_balance'):
-                session_manager.update_account_balance(account, balance_data)
+        # Call update_balance with individual parameters (not dict)
+        balance_manager.update_balance(
+            account=account,
+            balance=balance_data.get('balance', 0),
+            equity=balance_data.get('equity'),
+            margin=balance_data.get('margin'),
+            free_margin=balance_data.get('free_margin'),
+            currency=balance_data.get('currency', 'USD')
+        )
     except Exception as e:
         logger.warning(f"[BALANCE_UPDATE] Could not update balance: {e}")
 
