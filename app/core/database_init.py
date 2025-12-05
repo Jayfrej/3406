@@ -106,14 +106,53 @@ def ensure_database_schema() -> bool:
         logger.debug("[DB_INIT] ✓ Table 'accounts' ready")
 
         # ========================================
-        # TABLE 4: global_settings
+        # TABLE 4: global_settings (key-value format)
         # ========================================
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS global_settings (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            )
-        ''')
+        # Check if global_settings exists with old schema (id-based)
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='global_settings'")
+        gs_table_exists = cursor.fetchone() is not None
+
+        if gs_table_exists:
+            cursor.execute("PRAGMA table_info(global_settings)")
+            gs_columns = [col[1] for col in cursor.fetchall()]
+
+            if 'id' in gs_columns and 'key' not in gs_columns:
+                # Old schema detected - migrate to new format
+                logger.info("[DB_INIT] Migrating global_settings from old schema to key-value format...")
+
+                # Get existing secret_key if any
+                try:
+                    cursor.execute("SELECT secret_key, updated FROM global_settings WHERE id = 1")
+                    row = cursor.fetchone()
+                    old_secret = row[0] if row else None
+                    old_updated = row[1] if row and len(row) > 1 else None
+                except:
+                    old_secret = None
+                    old_updated = None
+
+                # Drop old table and create new one
+                cursor.execute("DROP TABLE global_settings")
+                cursor.execute('''
+                    CREATE TABLE global_settings (
+                        key TEXT PRIMARY KEY,
+                        value TEXT
+                    )
+                ''')
+
+                # Migrate old data to new format
+                if old_secret:
+                    cursor.execute("INSERT INTO global_settings (key, value) VALUES ('secret_key', ?)", (old_secret,))
+                if old_updated:
+                    cursor.execute("INSERT INTO global_settings (key, value) VALUES ('secret_key_updated', ?)", (old_updated,))
+
+                logger.info("[DB_INIT] ✓ global_settings migration complete")
+        else:
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS global_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            ''')
         logger.debug("[DB_INIT] ✓ Table 'global_settings' ready")
 
         # ========================================

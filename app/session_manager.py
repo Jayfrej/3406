@@ -57,27 +57,63 @@ class SessionManager:
                 """
             )
 
-            # Global settings table (สำหรับ Secret Key)
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS global_settings (
-                    id INTEGER PRIMARY KEY CHECK (id = 1),
-                    secret_key TEXT DEFAULT NULL,
-                    updated TEXT DEFAULT ''
-                )
-                """
-            )
+            # Global settings table (key-value format)
+            # Note: Uses key-value format to be compatible with database_init.py
 
-            # Insert default settings if not exists
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO global_settings (id, secret_key, updated)
-                VALUES (1, NULL, '')
-                """
-            )
+            # First check if global_settings exists with old schema (id-based)
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='global_settings'")
+            table_exists = cursor.fetchone() is not None
+
+            if table_exists:
+                # Check if it's old schema (has 'id' column) or new schema (has 'key' column)
+                cursor.execute("PRAGMA table_info(global_settings)")
+                gs_columns = [col[1] for col in cursor.fetchall()]
+
+                if 'id' in gs_columns and 'key' not in gs_columns:
+                    # Old schema detected - migrate to new format
+                    logger.info("[DB] Migrating global_settings from old schema to key-value format...")
+
+                    # Get existing secret_key if any
+                    try:
+                        cursor.execute("SELECT secret_key, updated FROM global_settings WHERE id = 1")
+                        row = cursor.fetchone()
+                        old_secret = row[0] if row else None
+                        old_updated = row[1] if row and len(row) > 1 else None
+                    except:
+                        old_secret = None
+                        old_updated = None
+
+                    # Drop old table and create new one
+                    conn.execute("DROP TABLE global_settings")
+                    conn.execute(
+                        """
+                        CREATE TABLE global_settings (
+                            key TEXT PRIMARY KEY,
+                            value TEXT
+                        )
+                        """
+                    )
+
+                    # Migrate old data to new format
+                    if old_secret:
+                        conn.execute("INSERT INTO global_settings (key, value) VALUES ('secret_key', ?)", (old_secret,))
+                    if old_updated:
+                        conn.execute("INSERT INTO global_settings (key, value) VALUES ('secret_key_updated', ?)", (old_updated,))
+
+                    logger.info("[DB] ✓ global_settings migration complete")
+            else:
+                # Table doesn't exist, create with new schema
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS global_settings (
+                        key TEXT PRIMARY KEY,
+                        value TEXT
+                    )
+                    """
+                )
 
             # ตรวจสอบและเพิ่มคอลัมน์ใหม่ถ้ายังไม่มี (สำหรับ database เดิม)
-            cursor = conn.cursor()
 
             # ตรวจสอบคอลัมน์ที่มีอยู่
             cursor.execute("PRAGMA table_info(accounts)")
@@ -507,7 +543,7 @@ class SessionManager:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 row = conn.execute(
-                    "SELECT secret_key FROM global_settings WHERE id = 1"
+                    "SELECT value FROM global_settings WHERE key = 'secret_key'"
                 ).fetchone()
 
                 return row[0] if row and row[0] else None
@@ -532,11 +568,18 @@ class SessionManager:
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute(
                     """
-                    UPDATE global_settings
-                    SET secret_key = ?, updated = ?
-                    WHERE id = 1
+                    INSERT OR REPLACE INTO global_settings (key, value)
+                    VALUES ('secret_key', ?)
                     """,
-                    (secret_key, datetime.now().isoformat())
+                    (secret_key,)
+                )
+                # Also store the update timestamp
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO global_settings (key, value)
+                    VALUES ('secret_key_updated', ?)
+                    """,
+                    (datetime.now().isoformat(),)
                 )
                 conn.commit()
 
