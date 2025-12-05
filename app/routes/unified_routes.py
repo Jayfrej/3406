@@ -990,3 +990,197 @@ def ack_command(license_key: str, account: str):
         'command_id': command_id,
         'acknowledged': True
     })
+
+
+# ========================================
+# BALANCE API ENDPOINTS (/{license_key}/api/balance/*, /{license_key}/api/account/*)
+# ========================================
+
+@unified_bp.route('/<license_key>/api/balance/need-update/<account>', methods=['GET'])
+def check_balance_need_update(license_key: str, account: str):
+    """
+    EA checks if balance update is needed
+
+    URL: https://yourdomain.com/{license_key}/api/balance/need-update/{account}
+    """
+    user, error = _validate_license_and_get_user(license_key)
+    if error:
+        return error
+
+    user_id = user['user_id']
+    user_email = user['email']
+    account = str(account).strip()
+
+    if not account:
+        return jsonify({'success': False, 'error': 'Account number required'}), 400
+
+    # Verify account belongs to user
+    user_accounts = user_service.get_user_accounts_list(user_id)
+    if account not in user_accounts:
+        logger.warning(f"[BALANCE_CHECK] Unauthorized account {account} for {user_email}")
+        return jsonify({'success': False, 'error': 'Unauthorized account'}), 403
+
+    # Check if balance update is needed
+    need_update = True  # Default to true to ensure EA sends balance
+    last_update = None
+
+    try:
+        from app.account_balance import AccountBalanceManager
+        balance_manager = AccountBalanceManager()
+
+        if hasattr(balance_manager, 'need_balance_update'):
+            need_update = balance_manager.need_balance_update(account)
+
+        if hasattr(balance_manager, 'get_last_update_time'):
+            last_update = balance_manager.get_last_update_time(account)
+    except Exception as e:
+        logger.debug(f"[BALANCE_CHECK] Balance manager not available: {e}")
+
+    return jsonify({
+        'success': True,
+        'type': 'balance_check',
+        'user_id': user_id,
+        'account': account,
+        'need_update': need_update,
+        'last_update': last_update
+    })
+
+
+@unified_bp.route('/<license_key>/api/account/balance', methods=['POST'])
+def update_account_balance(license_key: str):
+    """
+    EA updates account balance
+
+    URL: https://yourdomain.com/{license_key}/api/account/balance
+
+    Body:
+    {
+        "account": "12345678",
+        "balance": 10000.50,
+        "equity": 10050.25,
+        "margin": 500.00,
+        "free_margin": 9550.25,
+        "margin_level": 2010.05,
+        "profit": 50.25,
+        "currency": "USD"
+    }
+    """
+    user, error = _validate_license_and_get_user(license_key)
+    if error:
+        return error
+
+    user_id = user['user_id']
+    user_email = user['email']
+
+    data = request.get_json() or {}
+    account = str(data.get('account', '')).strip()
+
+    if not account:
+        return jsonify({'success': False, 'error': 'Account number required'}), 400
+
+    # Verify account belongs to user
+    user_accounts = user_service.get_user_accounts_list(user_id)
+    if account not in user_accounts:
+        logger.warning(f"[BALANCE_UPDATE] Unauthorized account {account} for {user_email}")
+        return jsonify({'success': False, 'error': 'Unauthorized account'}), 403
+
+    # Extract balance data
+    balance_data = {
+        'account': account,
+        'balance': data.get('balance', 0),
+        'equity': data.get('equity', 0),
+        'margin': data.get('margin', 0),
+        'free_margin': data.get('free_margin', 0),
+        'margin_level': data.get('margin_level', 0),
+        'profit': data.get('profit', 0),
+        'currency': data.get('currency', 'USD'),
+        'user_id': user_id,
+        'timestamp': datetime.now().isoformat()
+    }
+
+    logger.info(f"[BALANCE_UPDATE] User {user_email}, Account {account}, Balance: {balance_data.get('balance')}")
+
+    # Update balance
+    try:
+        from app.account_balance import AccountBalanceManager
+        balance_manager = AccountBalanceManager()
+
+        if hasattr(balance_manager, 'update_balance'):
+            balance_manager.update_balance(account, balance_data)
+        elif hasattr(balance_manager, 'set_balance'):
+            balance_manager.set_balance(account, balance_data)
+        else:
+            # Fallback - store in session manager
+            if hasattr(session_manager, 'update_account_balance'):
+                session_manager.update_account_balance(account, balance_data)
+    except Exception as e:
+        logger.warning(f"[BALANCE_UPDATE] Could not update balance: {e}")
+
+    # Also update heartbeat
+    try:
+        session_manager.update_account_heartbeat(account)
+    except Exception:
+        pass
+
+    return jsonify({
+        'success': True,
+        'type': 'balance_update',
+        'user_id': user_id,
+        'account': account,
+        'message': 'Balance updated successfully'
+    })
+
+
+@unified_bp.route('/<license_key>/api/account/<account>/balance', methods=['GET'])
+def get_account_balance(license_key: str, account: str):
+    """
+    Get account balance
+
+    URL: https://yourdomain.com/{license_key}/api/account/{account}/balance
+    """
+    user, error = _validate_license_and_get_user(license_key)
+    if error:
+        return error
+
+    user_id = user['user_id']
+    user_email = user['email']
+    account = str(account).strip()
+
+    if not account:
+        return jsonify({'success': False, 'error': 'Account number required'}), 400
+
+    # Verify account belongs to user
+    user_accounts = user_service.get_user_accounts_list(user_id)
+    if account not in user_accounts:
+        logger.warning(f"[GET_BALANCE] Unauthorized account {account} for {user_email}")
+        return jsonify({'success': False, 'error': 'Unauthorized account'}), 403
+
+    # Get balance
+    balance_data = None
+    try:
+        from app.account_balance import AccountBalanceManager
+        balance_manager = AccountBalanceManager()
+
+        if hasattr(balance_manager, 'get_balance'):
+            balance_data = balance_manager.get_balance(account)
+    except Exception as e:
+        logger.debug(f"[GET_BALANCE] Balance manager not available: {e}")
+
+    if balance_data:
+        return jsonify({
+            'success': True,
+            'type': 'get_balance',
+            'user_id': user_id,
+            'account': account,
+            'balance': balance_data
+        })
+    else:
+        return jsonify({
+            'success': True,
+            'type': 'get_balance',
+            'user_id': user_id,
+            'account': account,
+            'balance': None,
+            'message': 'No balance data available'
+        })
+
