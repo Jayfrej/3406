@@ -1,0 +1,21 @@
+[
+  {
+    "id": "pair_1764738512962",
+    "master_account": "279289341",
+    "slave_account": "1512017082",
+    "master_nickname": "",
+    "slave_nickname": "",
+    "api_key": "ctk_KuDTtfD476jDQe8pdK3_ccHXgbyBmlVK",
+    "status": "inactive",
+    "settings": {
+      "auto_map_symbol": true,
+      "auto_map_volume": true,
+      "copy_psl": true,
+      "volume_mode": "multiply",
+      "multiplier": 2.0
+    },
+    "created": "2025-12-03T12:08:32.962392",
+    "updated": "2025-12-03T12:08:40.971805",
+    "user_id": "admin_001"
+  }
+]

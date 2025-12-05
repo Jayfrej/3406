@@ -17,7 +17,7 @@ import sqlite3
 import secrets
 import logging
 from datetime import datetime
-from typing import Optional, Dict, List
+from typing import Optional, List
 
 logger = logging.getLogger(__name__)
 
@@ -41,21 +41,38 @@ class UserService:
             conn = self._get_connection()
             cursor = conn.cursor()
 
+            # Check if users table exists first
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+            if not cursor.fetchone():
+                # Table doesn't exist yet - will be created by database_init
+                conn.close()
+                return
+
             # Check existing columns
             cursor.execute("PRAGMA table_info(users)")
             columns = [col[1] for col in cursor.fetchall()]
 
             # Add license_key column if missing
+            # Note: SQLite cannot add UNIQUE column to table with existing data
+            # So we add without UNIQUE constraint, uniqueness enforced at insert time
             if 'license_key' not in columns:
-                cursor.execute('ALTER TABLE users ADD COLUMN license_key TEXT UNIQUE')
-                conn.commit()
-                logger.info("[USER_SERVICE] Added 'license_key' column to users table")
+                try:
+                    cursor.execute('ALTER TABLE users ADD COLUMN license_key TEXT')
+                    conn.commit()
+                    logger.info("[USER_SERVICE] Added 'license_key' column to users table")
+                except sqlite3.OperationalError as e:
+                    if 'duplicate column name' not in str(e).lower():
+                        logger.warning(f"[USER_SERVICE] Could not add license_key column: {e}")
 
             # Add webhook_secret column if missing
             if 'webhook_secret' not in columns:
-                cursor.execute('ALTER TABLE users ADD COLUMN webhook_secret TEXT UNIQUE')
-                conn.commit()
-                logger.info("[USER_SERVICE] Added 'webhook_secret' column to users table")
+                try:
+                    cursor.execute('ALTER TABLE users ADD COLUMN webhook_secret TEXT')
+                    conn.commit()
+                    logger.info("[USER_SERVICE] Added 'webhook_secret' column to users table")
+                except sqlite3.OperationalError as e:
+                    if 'duplicate column name' not in str(e).lower():
+                        logger.warning(f"[USER_SERVICE] Could not add webhook_secret column: {e}")
 
             # Generate license keys and secrets for existing users
             cursor.execute("SELECT user_id FROM users WHERE license_key IS NULL OR webhook_secret IS NULL")

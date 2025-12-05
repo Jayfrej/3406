@@ -163,6 +163,7 @@ class CopyManager:
             # สร้าง Pair object
             pair = {
                 'id': f"pair_{int(datetime.now().timestamp() * 1000)}",
+                'user_id': None,  # Legacy method - use create_pair_for_user for multi-user
                 'master_account': str(master_account),
                 'slave_account': str(slave_account),
                 'master_nickname': master_nickname,

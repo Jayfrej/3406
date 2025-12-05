@@ -361,3 +361,387 @@ def _handle_trading_signal(user_id: str, user_email: str, data: dict):
         system_logs_service.add_log('error', f'❌ Signal failed: {error_msg[:80]}', user_id=user_id)
         return jsonify({'error': error_msg}), 500
 
+
+# ========================================
+# EA API ENDPOINTS (/{license_key}/api/ea/*)
+# ========================================
+
+def _validate_license_and_get_user(license_key: str) -> tuple:
+    """
+    Helper to validate license key and get user info.
+    Returns (user_dict, None) on success or (None, error_response) on failure.
+    """
+    if not license_key or len(license_key) < 10:
+        return None, (jsonify({'success': False, 'error': 'Invalid license key format'}), 401)
+
+    if license_key in ['static', 'api', 'webhook', 'login', 'logout', 'auth', 'health', 'favicon.ico']:
+        return None, (jsonify({'success': False, 'error': 'Invalid endpoint'}), 404)
+
+    user = user_service.get_user_by_license_key(license_key)
+    if not user:
+        return None, (jsonify({'success': False, 'error': 'Invalid license key'}), 401)
+
+    return user, None
+
+
+@unified_bp.route('/<license_key>/api/ea/heartbeat', methods=['POST'])
+def ea_heartbeat(license_key: str):
+    """
+    EA Heartbeat - รายงานสถานะ EA
+
+    URL: https://yourdomain.com/{license_key}/api/ea/heartbeat
+
+    Body:
+    {
+        "account": "12345678",
+        "broker": "XM",
+        "balance": 10000.50,
+        "equity": 10050.25,
+        "ea_version": "1.0.0"
+    }
+    """
+    user, error = _validate_license_and_get_user(license_key)
+    if error:
+        return error
+
+    user_id = user['user_id']
+    user_email = user['email']
+
+    data = request.get_json() or {}
+    account = str(data.get('account', '')).strip()
+
+    if not account:
+        return jsonify({'success': False, 'error': 'Account number required'}), 400
+
+    logger.info(f"[EA_HEARTBEAT] User {user_email}, Account {account}")
+
+    # Update heartbeat
+    try:
+        session_manager.update_account_heartbeat(account)
+    except Exception as e:
+        logger.warning(f"[EA_HEARTBEAT] Update failed: {e}")
+
+    return jsonify({
+        'success': True,
+        'type': 'heartbeat',
+        'user_id': user_id,
+        'account': account,
+        'server_time': datetime.now().isoformat()
+    })
+
+
+@unified_bp.route('/<license_key>/api/ea/get_signals', methods=['GET', 'POST'])
+def ea_get_signals(license_key: str):
+    """
+    EA ดึง pending signals
+
+    URL: https://yourdomain.com/{license_key}/api/ea/get_signals
+
+    Query/Body:
+    {
+        "account": "12345678"
+    }
+    """
+    user, error = _validate_license_and_get_user(license_key)
+    if error:
+        return error
+
+    user_id = user['user_id']
+    user_email = user['email']
+
+    # Get account from query or body
+    account = request.args.get('account')
+    if request.is_json:
+        data = request.get_json() or {}
+        account = account or data.get('account')
+
+    if not account:
+        return jsonify({'success': False, 'error': 'Account number required'}), 400
+
+    account = str(account).strip()
+
+    # Verify account belongs to user
+    user_accounts = user_service.get_user_accounts_list(user_id)
+    if account not in user_accounts:
+        logger.warning(f"[EA_SIGNALS] Unauthorized account {account} for {user_email}")
+        return jsonify({'success': False, 'error': 'Unauthorized account'}), 403
+
+    logger.debug(f"[EA_SIGNALS] User {user_email}, Account {account}")
+
+    # Get pending command/signal for this account
+    command = None
+    try:
+        if hasattr(session_manager, 'get_pending_command'):
+            command = session_manager.get_pending_command(account)
+    except Exception as e:
+        logger.warning(f"[EA_SIGNALS] Error getting signals: {e}")
+
+    if command:
+        logger.info(f"[EA_SIGNALS] Sending signal to {account}: {command.get('action', 'unknown')}")
+        return jsonify({
+            'success': True,
+            'type': 'get_signals',
+            'user_id': user_id,
+            'account': account,
+            'has_signal': True,
+            'signals': [command]
+        })
+    else:
+        return jsonify({
+            'success': True,
+            'type': 'get_signals',
+            'user_id': user_id,
+            'account': account,
+            'has_signal': False,
+            'signals': []
+        })
+
+
+@unified_bp.route('/<license_key>/api/ea/confirm_execution', methods=['POST'])
+def ea_confirm_execution(license_key: str):
+    """
+    EA ยืนยันการ execute trade
+
+    URL: https://yourdomain.com/{license_key}/api/ea/confirm_execution
+
+    Body:
+    {
+        "account": "12345678",
+        "signal_id": "abc123",
+        "ticket": 123456789,
+        "status": "success",
+        "message": "Order executed"
+    }
+    """
+    user, error = _validate_license_and_get_user(license_key)
+    if error:
+        return error
+
+    user_id = user['user_id']
+    user_email = user['email']
+
+    data = request.get_json() or {}
+    account = str(data.get('account', '')).strip()
+    signal_id = data.get('signal_id', '')
+    ticket = data.get('ticket')
+    status = data.get('status', 'unknown')
+    message = data.get('message', '')
+
+    if not account:
+        return jsonify({'success': False, 'error': 'Account number required'}), 400
+
+    # Verify account belongs to user
+    user_accounts = user_service.get_user_accounts_list(user_id)
+    if account not in user_accounts:
+        logger.warning(f"[EA_CONFIRM] Unauthorized account {account} for {user_email}")
+        return jsonify({'success': False, 'error': 'Unauthorized account'}), 403
+
+    logger.info(f"[EA_CONFIRM] User {user_email}, Account {account}, Status: {status}, Ticket: {ticket}")
+
+    # Log the execution result
+    if status == 'success':
+        system_logs_service.add_log(
+            'success',
+            f'✅ Trade executed: Account {account}, Ticket {ticket}',
+            user_id=user_id
+        )
+    else:
+        system_logs_service.add_log(
+            'error',
+            f'❌ Trade failed: Account {account}, {message}',
+            user_id=user_id
+        )
+
+    return jsonify({
+        'success': True,
+        'type': 'confirm_execution',
+        'user_id': user_id,
+        'account': account,
+        'confirmed': True
+    })
+
+
+@unified_bp.route('/<license_key>/api/ea/register', methods=['POST'])
+def ea_register(license_key: str):
+    """
+    EA ลงทะเบียน account ใหม่
+
+    URL: https://yourdomain.com/{license_key}/api/ea/register
+
+    Body:
+    {
+        "account": "12345678",
+        "broker": "XM Global",
+        "server": "XM-MT5-Real",
+        "balance": 10000.00
+    }
+    """
+    user, error = _validate_license_and_get_user(license_key)
+    if error:
+        return error
+
+    user_id = user['user_id']
+    user_email = user['email']
+
+    data = request.get_json() or {}
+    account = str(data.get('account', '')).strip()
+    broker = data.get('broker', 'Unknown')
+    server = data.get('server', '')
+
+    if not account:
+        return jsonify({'success': False, 'error': 'Account number required'}), 400
+
+    logger.info(f"[EA_REGISTER] User {user_email}, Account {account}, Broker {broker}")
+
+    # Check if account already exists for this user
+    user_accounts = user_service.get_user_accounts_list(user_id)
+
+    if account in user_accounts:
+        logger.info(f"[EA_REGISTER] Account {account} already registered for {user_email}")
+        return jsonify({
+            'success': True,
+            'type': 'register',
+            'user_id': user_id,
+            'account': account,
+            'status': 'already_exists',
+            'message': 'Account already registered'
+        })
+
+    # Register new account
+    try:
+        if hasattr(session_manager, 'add_remote_account_with_user'):
+            session_manager.add_remote_account_with_user(account, f"{broker} - {account}", user_id)
+        else:
+            session_manager.add_remote_account(account, f"{broker} - {account}")
+
+        logger.info(f"[EA_REGISTER] ✅ Account {account} registered for {user_email}")
+        system_logs_service.add_log(
+            'success',
+            f'✅ New account registered: {account} ({broker})',
+            user_id=user_id
+        )
+
+        return jsonify({
+            'success': True,
+            'type': 'register',
+            'user_id': user_id,
+            'account': account,
+            'status': 'registered',
+            'message': 'Account registered successfully'
+        })
+
+    except Exception as e:
+        logger.error(f"[EA_REGISTER] Failed to register account: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Failed to register account: {str(e)}'
+        }), 500
+
+
+@unified_bp.route('/<license_key>/api/ea/get_copy_pairs', methods=['GET'])
+def ea_get_copy_pairs(license_key: str):
+    """
+    EA ดึง copy trading pairs สำหรับ account
+
+    URL: https://yourdomain.com/{license_key}/api/ea/get_copy_pairs
+
+    Query:
+    ?account=12345678
+    """
+    user, error = _validate_license_and_get_user(license_key)
+    if error:
+        return error
+
+    user_id = user['user_id']
+    user_email = user['email']
+
+    account = request.args.get('account', '').strip()
+
+    if not account:
+        return jsonify({'success': False, 'error': 'Account number required'}), 400
+
+    # Verify account belongs to user
+    user_accounts = user_service.get_user_accounts_list(user_id)
+    if account not in user_accounts:
+        logger.warning(f"[EA_PAIRS] Unauthorized account {account} for {user_email}")
+        return jsonify({'success': False, 'error': 'Unauthorized account'}), 403
+
+    logger.debug(f"[EA_PAIRS] User {user_email}, Account {account}")
+
+    # Get copy pairs for this user
+    try:
+        from app.copy_trading import CopyManager
+        copy_manager = CopyManager()
+
+        # Get pairs where this account is master or slave
+        all_pairs = copy_manager.get_pairs()
+
+        # Filter by user_id
+        user_pairs = [p for p in all_pairs if p.get('user_id') == user_id]
+
+        # Further filter where account is involved
+        account_pairs = []
+        for pair in user_pairs:
+            if pair.get('master_account') == account or pair.get('slave_account') == account:
+                account_pairs.append({
+                    'pair_id': pair.get('id'),
+                    'master_account': pair.get('master_account'),
+                    'slave_account': pair.get('slave_account'),
+                    'enabled': pair.get('enabled', True),
+                    'copy_mode': pair.get('copy_mode', 'fixed'),
+                    'fixed_lot': pair.get('fixed_lot', 0.01)
+                })
+
+        return jsonify({
+            'success': True,
+            'type': 'get_copy_pairs',
+            'user_id': user_id,
+            'account': account,
+            'pairs': account_pairs
+        })
+
+    except Exception as e:
+        logger.error(f"[EA_PAIRS] Error getting copy pairs: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Failed to get copy pairs: {str(e)}'
+        }), 500
+
+
+@unified_bp.route('/<license_key>/api/ea/status', methods=['GET'])
+def ea_status(license_key: str):
+    """
+    ตรวจสอบสถานะ endpoint และ license
+
+    URL: https://yourdomain.com/{license_key}/api/ea/status
+    """
+    user, error = _validate_license_and_get_user(license_key)
+    if error:
+        return error
+
+    user_id = user['user_id']
+    user_email = user['email']
+
+    # Get user's accounts
+    user_accounts = user_service.get_user_accounts_list(user_id)
+
+    return jsonify({
+        'success': True,
+        'type': 'status',
+        'user_id': user_id,
+        'email': user_email,
+        'license_valid': True,
+        'accounts_count': len(user_accounts),
+        'accounts': user_accounts,
+        'server_time': datetime.now().isoformat(),
+        'endpoints': {
+            'heartbeat': f'/{license_key}/api/ea/heartbeat',
+            'get_signals': f'/{license_key}/api/ea/get_signals',
+            'confirm_execution': f'/{license_key}/api/ea/confirm_execution',
+            'register': f'/{license_key}/api/ea/register',
+            'get_copy_pairs': f'/{license_key}/api/ea/get_copy_pairs',
+            'status': f'/{license_key}/api/ea/status'
+        }
+    })
+
+

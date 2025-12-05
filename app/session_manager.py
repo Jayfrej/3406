@@ -139,12 +139,31 @@ class SessionManager:
                 logger.info("[DB] Migrating from per-account to global secret key")
                 # SQLite ไม่รองรับ DROP COLUMN โดยตรง แต่เราจะไม่ใช้มันแล้ว
 
+            # ===== MULTI-USER SAAS: เพิ่มคอลัมน์ user_id สำหรับ account ownership =====
+            if 'user_id' not in columns:
+                logger.info("[DB] Adding column: user_id for Multi-User SaaS")
+                conn.execute("ALTER TABLE accounts ADD COLUMN user_id TEXT DEFAULT NULL")
+                # Migrate existing accounts to first admin user
+                try:
+                    admin_row = conn.execute(
+                        "SELECT user_id FROM users WHERE is_admin = 1 ORDER BY created_at ASC LIMIT 1"
+                    ).fetchone()
+                    if admin_row:
+                        conn.execute(
+                            "UPDATE accounts SET user_id = ? WHERE user_id IS NULL",
+                            (admin_row[0],)
+                        )
+                        logger.info(f"[DB] Migrated existing accounts to admin user: {admin_row[0]}")
+                except Exception as e:
+                    logger.warning(f"[DB] Could not migrate accounts to admin: {e}")
+
             conn.commit()
             logger.info("[DB] Database initialized successfully")
 
     def get_all_accounts(self) -> List[Dict]:
         """
         ดึงรายการบัญชีทั้งหมด (เวอร์ชัน Remote)
+        ⚠️ ใช้สำหรับ Admin เท่านั้น - ใช้ get_accounts_by_user สำหรับ normal users
         """
         # เช็คสถานะก่อน
         self.check_account_online_status()
@@ -152,7 +171,7 @@ class SessionManager:
         with sqlite3.connect(self.db_path) as conn:
             rows = conn.execute(
                 """
-                SELECT account, nickname, status, broker, last_seen, created, symbol_received
+                SELECT account, nickname, status, broker, last_seen, created, symbol_received, user_id
                 FROM accounts
                 ORDER BY created DESC
                 """
@@ -168,11 +187,235 @@ class SessionManager:
                 'last_seen': row[4],
                 'created': row[5],
                 'pid': None,  # ไม่มี PID ในระบบ Remote
-                'symbol_received': bool(row[6]) if len(row) > 6 and row[6] is not None else False
+                'symbol_received': bool(row[6]) if len(row) > 6 and row[6] is not None else False,
+                'user_id': row[7] if len(row) > 7 else None
             }
             accounts.append(acc)
 
         return accounts
+
+    # ============= Multi-User SaaS Methods =============
+
+    def get_accounts_by_user(self, user_id: str) -> List[Dict]:
+        """
+        ดึงรายการบัญชีของ user ที่ระบุเท่านั้น (Multi-User SaaS)
+
+        Per MIGRATION_ROADMAP.md: STRICT DATA ISOLATION
+
+        Args:
+            user_id: User ID to filter accounts
+
+        Returns:
+            List of account dictionaries belonging to the user
+        """
+        # เช็คสถานะก่อน
+        self.check_account_online_status()
+
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT account, nickname, status, broker, last_seen, created, symbol_received, user_id
+                FROM accounts
+                WHERE user_id = ?
+                ORDER BY created DESC
+                """,
+                (user_id,)
+            ).fetchall()
+
+        accounts = []
+        for row in rows:
+            acc = {
+                'account': row[0],
+                'nickname': row[1] or '',
+                'status': row[2] or 'Wait for Activate',
+                'broker': row[3] or '-',
+                'last_seen': row[4],
+                'created': row[5],
+                'pid': None,
+                'symbol_received': bool(row[6]) if len(row) > 6 and row[6] is not None else False,
+                'user_id': row[7] if len(row) > 7 else None
+            }
+            accounts.append(acc)
+
+        return accounts
+
+    def add_remote_account_with_user(self, account: str, nickname: str, user_id: str) -> bool:
+        """
+        เพิ่มบัญชีแบบ Remote พร้อม user_id (Multi-User SaaS)
+
+        Per MIGRATION_ROADMAP.md: Account must be assigned to user
+
+        Args:
+            account: Account number
+            nickname: Account nickname
+            user_id: Owner user ID
+
+        Returns:
+            bool: True if successful
+        """
+        try:
+            if self.account_exists(account):
+                logger.info(f"[REMOTE] Account {account} already exists")
+                return False
+
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts
+                    (account, nickname, status, created, user_id)
+                    VALUES (?, ?, 'Wait for Activate', ?, ?)
+                    """,
+                    (account, nickname, datetime.now().isoformat(), user_id)
+                )
+                conn.commit()
+
+            logger.info(f"[REMOTE] Account {account} added for user {user_id} (waiting for EA connection)")
+            return True
+
+        except Exception as e:
+            logger.error(f"[REMOTE_ADD_USER_ERROR] {e}")
+            return False
+
+    def validate_account_ownership(self, account: str, user_id: str) -> bool:
+        """
+        ตรวจสอบว่า account เป็นของ user ที่ระบุหรือไม่
+
+        Per MIGRATION_ROADMAP.md: CRITICAL for data isolation
+
+        Args:
+            account: Account number
+            user_id: User ID to check ownership
+
+        Returns:
+            bool: True if user owns this account
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                row = conn.execute(
+                    "SELECT user_id FROM accounts WHERE account = ?",
+                    (account,)
+                ).fetchone()
+
+                if not row:
+                    return False
+
+                # Account belongs to this user?
+                return row[0] == user_id
+
+        except Exception as e:
+            logger.error(f"[VALIDATE_OWNERSHIP_ERROR] {e}")
+            return False
+
+    def get_account_owner(self, account: str) -> Optional[str]:
+        """
+        ดึง user_id ที่เป็นเจ้าของ account
+
+        Args:
+            account: Account number
+
+        Returns:
+            str: User ID or None if not found
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                row = conn.execute(
+                    "SELECT user_id FROM accounts WHERE account = ?",
+                    (account,)
+                ).fetchone()
+
+                return row[0] if row else None
+
+        except Exception as e:
+            logger.error(f"[GET_OWNER_ERROR] {e}")
+            return None
+
+    def get_account_info_for_user(self, account: str, user_id: str) -> Optional[Dict]:
+        """
+        ดึงข้อมูลบัญชี พร้อมตรวจสอบ ownership (Multi-User SaaS)
+
+        Args:
+            account: Account number
+            user_id: User ID for ownership check
+
+        Returns:
+            Dict or None if not found/not owned
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute(
+                """
+                SELECT account, nickname, status, broker, last_seen, created, symbol_received, user_id
+                FROM accounts
+                WHERE account = ? AND user_id = ?
+                """,
+                (account, user_id)
+            ).fetchone()
+
+        if not row:
+            return None
+
+        return {
+            'account': row[0],
+            'nickname': row[1] or '',
+            'status': row[2] or 'Wait for Activate',
+            'broker': row[3] or '-',
+            'last_seen': row[4],
+            'created': row[5],
+            'pid': None,
+            'symbol_received': bool(row[6]) if row[6] is not None else False,
+            'user_id': row[7]
+        }
+
+    def delete_account_for_user(self, account: str, user_id: str) -> bool:
+        """
+        ลบบัญชี พร้อมตรวจสอบ ownership (Multi-User SaaS)
+
+        Args:
+            account: Account number
+            user_id: User ID for ownership check
+
+        Returns:
+            bool: True if deleted, False if not found/not owned
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "DELETE FROM accounts WHERE account = ? AND user_id = ?",
+                    (account, user_id)
+                )
+                conn.commit()
+
+                if cursor.rowcount > 0:
+                    logger.info(f"[REMOTE] Account {account} deleted by user {user_id}")
+                    return True
+                else:
+                    logger.warning(f"[REMOTE] Account {account} not found or not owned by user {user_id}")
+                    return False
+
+        except Exception as e:
+            logger.error(f"[DELETE_USER_ERROR] {e}")
+            return False
+
+    def count_accounts_by_user(self, user_id: str) -> int:
+        """
+        นับจำนวน accounts ของ user
+
+        Args:
+            user_id: User ID
+
+        Returns:
+            int: Number of accounts
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM accounts WHERE user_id = ?",
+                    (user_id,)
+                ).fetchone()
+                return row[0] if row else 0
+        except Exception as e:
+            logger.error(f"[COUNT_ACCOUNTS_ERROR] {e}")
+            return 0
 
     def account_exists(self, account: str) -> bool:
         with sqlite3.connect(self.db_path) as conn:
@@ -194,7 +437,7 @@ class SessionManager:
         with sqlite3.connect(self.db_path) as conn:
             row = conn.execute(
                 """
-                SELECT account, nickname, status, broker, last_seen, created, symbol_received
+                SELECT account, nickname, status, broker, last_seen, created, symbol_received, user_id
                 FROM accounts
                 WHERE account = ?
                 """,
@@ -212,7 +455,8 @@ class SessionManager:
             'last_seen': row[4],
             'created': row[5],
             'pid': None,
-            'symbol_received': bool(row[6]) if row[6] is not None else False
+            'symbol_received': bool(row[6]) if row[6] is not None else False,
+            'user_id': row[7] if len(row) > 7 else None
         }
 
     # ============= Remote Mode Functions =============
@@ -1045,222 +1289,6 @@ pause
 
         return False
 
-    # =================== Multi-User Methods (Phase 1.2) ===================
-    # Reference: MIGRATION_ROADMAP.md Phase 1.2 - SessionManager Extensions
-
-    def get_accounts_by_user(self, user_id: str) -> List[Dict]:
-        """
-        Get all accounts for a specific user.
-
-        Per MIGRATION_ROADMAP.md: Must filter by WHERE user_id = ?
-
-        Args:
-            user_id: User ID to filter by
-
-        Returns:
-            List of account dictionaries belonging to the user
-        """
-        # Check online status first
-        self.check_account_online_status()
-
-        with sqlite3.connect(self.db_path) as conn:
-            # Check if user_id column exists
-            cursor = conn.cursor()
-            cursor.execute("PRAGMA table_info(accounts)")
-            columns = [col[1] for col in cursor.fetchall()]
-
-            if 'user_id' not in columns:
-                logger.warning("[MULTI_USER] user_id column not found - run migration 001 first")
-                # Fallback: return all accounts (legacy behavior)
-                return self.get_all_accounts()
-
-            rows = conn.execute(
-                """
-                SELECT account, nickname, status, broker, last_seen, created, symbol_received, user_id
-                FROM accounts
-                WHERE user_id = ?
-                ORDER BY created DESC
-                """,
-                (user_id,)
-            ).fetchall()
-
-        accounts = []
-        for row in rows:
-            acc = {
-                'account': row[0],
-                'nickname': row[1] or '',
-                'status': row[2] or 'Wait for Activate',
-                'broker': row[3] or '-',
-                'last_seen': row[4],
-                'created': row[5],
-                'pid': None,
-                'symbol_received': bool(row[6]) if row[6] is not None else False,
-                'user_id': row[7]
-            }
-            accounts.append(acc)
-
-        return accounts
-
-    def assign_account_to_user(self, account: str, user_id: str) -> bool:
-        """
-        Assign an account to a specific user.
-
-        Per MIGRATION_ROADMAP.md Phase 1.2
-
-        Args:
-            account: Account number to assign
-            user_id: User ID to assign to
-
-        Returns:
-            bool: True if assignment succeeded
-        """
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                # Check if user_id column exists
-                cursor = conn.cursor()
-                cursor.execute("PRAGMA table_info(accounts)")
-                columns = [col[1] for col in cursor.fetchall()]
-
-                if 'user_id' not in columns:
-                    logger.error("[MULTI_USER] user_id column not found - run migration 001 first")
-                    return False
-
-                conn.execute(
-                    "UPDATE accounts SET user_id = ? WHERE account = ?",
-                    (user_id, account)
-                )
-                conn.commit()
-
-            logger.info(f"[MULTI_USER] Assigned account {account} to user {user_id}")
-            return True
-
-        except Exception as e:
-            logger.error(f"[MULTI_USER] Failed to assign account: {e}")
-            return False
-
-    def remove_user_accounts(self, user_id: str) -> bool:
-        """
-        Remove all accounts for a user (for deletion/cleanup).
-
-        Per MIGRATION_ROADMAP.md Phase 1.2
-
-        Args:
-            user_id: User ID whose accounts should be removed
-
-        Returns:
-            bool: True if removal succeeded
-        """
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                # Check if user_id column exists
-                cursor = conn.cursor()
-                cursor.execute("PRAGMA table_info(accounts)")
-                columns = [col[1] for col in cursor.fetchall()]
-
-                if 'user_id' not in columns:
-                    logger.error("[MULTI_USER] user_id column not found - run migration 001 first")
-                    return False
-
-                # Get count before deletion
-                cursor.execute(
-                    "SELECT COUNT(*) FROM accounts WHERE user_id = ?",
-                    (user_id,)
-                )
-                count = cursor.fetchone()[0]
-
-                # Delete accounts
-                conn.execute(
-                    "DELETE FROM accounts WHERE user_id = ?",
-                    (user_id,)
-                )
-                conn.commit()
-
-            logger.info(f"[MULTI_USER] Removed {count} accounts for user {user_id}")
-            return True
-
-        except Exception as e:
-            logger.error(f"[MULTI_USER] Failed to remove user accounts: {e}")
-            return False
-
-    def get_account_owner(self, account: str) -> Optional[str]:
-        """
-        Get the user_id who owns this account.
-
-        Args:
-            account: Account number
-
-        Returns:
-            str: User ID or None if not found
-        """
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                # Check if user_id column exists
-                cursor = conn.cursor()
-                cursor.execute("PRAGMA table_info(accounts)")
-                columns = [col[1] for col in cursor.fetchall()]
-
-                if 'user_id' not in columns:
-                    return None
-
-                row = conn.execute(
-                    "SELECT user_id FROM accounts WHERE account = ?",
-                    (account,)
-                ).fetchone()
-
-                return row[0] if row else None
-
-        except Exception as e:
-            logger.error(f"[MULTI_USER] Failed to get account owner: {e}")
-            return None
-
-    def add_remote_account_with_user(self, account: str, nickname: str = "", user_id: str = None) -> bool:
-        """
-        Add a remote account with user assignment.
-
-        Extended version of add_remote_account for multi-user support.
-
-        Args:
-            account: Account number
-            nickname: Account nickname
-            user_id: User ID to assign (optional)
-
-        Returns:
-            bool: True if account was added successfully
-        """
-        try:
-            if self.account_exists(account):
-                logger.info(f"[REMOTE] Account {account} already exists")
-                return False
-
-            with sqlite3.connect(self.db_path) as conn:
-                # Check if user_id column exists
-                cursor = conn.cursor()
-                cursor.execute("PRAGMA table_info(accounts)")
-                columns = [col[1] for col in cursor.fetchall()]
-
-                if 'user_id' in columns and user_id:
-                    conn.execute(
-                        """
-                        INSERT INTO accounts
-                        (account, nickname, status, created, user_id)
-                        VALUES (?, ?, 'Wait for Activate', ?, ?)
-                        """,
-                        (account, nickname, datetime.now().isoformat(), user_id)
-                    )
-                else:
-                    conn.execute(
-                        """
-                        INSERT INTO accounts
-                        (account, nickname, status, created)
-                        VALUES (?, ?, 'Wait for Activate', ?)
-                        """,
-                        (account, nickname, datetime.now().isoformat())
-                    )
-                conn.commit()
-
-            logger.info(f"[REMOTE] Account {account} added (user: {user_id or 'none'})")
-            return True
-
-        except Exception as e:
-            logger.error(f"[REMOTE_ADD_ERROR] {e}")
-            return False
+    # Note: Multi-User methods (get_accounts_by_user, add_remote_account_with_user,
+    # validate_account_ownership, get_account_owner, etc.) are defined earlier
+    # in this file right after get_all_accounts() method.

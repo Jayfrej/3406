@@ -5,6 +5,7 @@ Handles per-user webhook token management:
 - Generate unique webhook tokens
 - Lookup user by token
 - Rotate/revoke tokens
+- Get webhook URL for user
 
 Reference: MIGRATION_ROADMAP.md Phase 2.3
 """
@@ -17,6 +18,9 @@ from datetime import datetime
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+# External base URL for webhook endpoints
+EXTERNAL_BASE_URL = os.getenv('EXTERNAL_BASE_URL', 'http://localhost:5000')
 
 
 class TokenService:
@@ -201,21 +205,152 @@ class TokenService:
 
     def get_webhook_url(self, user_id: str) -> Optional[str]:
         """
-        Get full webhook URL for user.
+        Get the full webhook URL for a user.
+
+        If user doesn't have a token, generates one automatically.
 
         Args:
             user_id: User ID
 
         Returns:
-            str: Full webhook URL or None
+            str: Full webhook URL (e.g., https://domain.com/webhook/whk_xxx)
         """
         token = self.get_user_webhook_token(user_id)
+
         if not token:
-            # Generate one if doesn't exist
+            # Auto-generate token if user doesn't have one
             token = self.generate_webhook_token(user_id)
 
-        base_url = os.getenv('EXTERNAL_BASE_URL', 'http://localhost:5000')
-        return f"{base_url}/webhook/{token}"
+        if token:
+            return f"{EXTERNAL_BASE_URL}/webhook/{token}"
+
+        return None
+
+    def get_webhook_url_by_token(self, token: str) -> Optional[str]:
+        """
+        Get the full webhook URL for a given token.
+
+        Args:
+            token: Webhook token
+
+        Returns:
+            str: Full webhook URL
+        """
+        return f"{EXTERNAL_BASE_URL}/webhook/{token}"
+
+    def update_last_used(self, token: str) -> bool:
+        """
+        Update last_used timestamp for a token.
+
+        Called when webhook is triggered.
+
+        Args:
+            token: Webhook token
+
+        Returns:
+            bool: True if updated
+        """
+        conn = self._get_connection()
+
+        try:
+            # Check if last_used column exists
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(user_tokens)")
+            columns = [col[1] for col in cursor.fetchall()]
+
+            if 'last_used' not in columns:
+                # Add column if it doesn't exist
+                cursor.execute("ALTER TABLE user_tokens ADD COLUMN last_used TEXT")
+                conn.commit()
+
+            cursor.execute(
+                "UPDATE user_tokens SET last_used = ? WHERE webhook_token = ?",
+                (datetime.now().isoformat(), token)
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+        except sqlite3.Error as e:
+            logger.error(f"[TOKEN_SERVICE] Error updating last_used: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def get_token_info(self, token: str) -> Optional[dict]:
+        """
+        Get detailed token information.
+
+        Args:
+            token: Webhook token
+
+        Returns:
+            dict: Token info or None if not found
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute(
+                """
+                SELECT token_id, user_id, webhook_token, webhook_url, created_at
+                FROM user_tokens WHERE webhook_token = ?
+                """,
+                (token,)
+            )
+            row = cursor.fetchone()
+
+            if row:
+                return {
+                    'token_id': row[0],
+                    'user_id': row[1],
+                    'webhook_token': row[2],
+                    'webhook_url': row[3],
+                    'created_at': row[4]
+                }
+            return None
+
+        finally:
+            conn.close()
+
+    def get_all_tokens_for_user(self, user_id: str) -> list:
+        """
+        Get all tokens for a user.
+
+        Args:
+            user_id: User ID
+
+        Returns:
+            list: List of token dictionaries
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute(
+                """
+                SELECT token_id, user_id, webhook_token, webhook_url, created_at
+                FROM user_tokens WHERE user_id = ?
+                ORDER BY created_at DESC
+                """,
+                (user_id,)
+            )
+            rows = cursor.fetchall()
+
+            return [
+                {
+                    'token_id': row[0],
+                    'user_id': row[1],
+                    'webhook_token': row[2],
+                    'webhook_url': row[3] or f"{EXTERNAL_BASE_URL}/webhook/{row[2]}",
+                    'created_at': row[4]
+                }
+                for row in rows
+            ]
+
+        finally:
+            conn.close()
+
+    # Note: get_webhook_url is defined earlier in this class
 
     def validate_token(self, token: str) -> bool:
         """

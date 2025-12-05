@@ -201,9 +201,29 @@ def broadcast_to_sse_clients(data: dict, event_type: str = 'message'):
 
 @system_bp.route('/health', methods=['GET', 'HEAD'])
 def health_check():
-    """สำหรับหน้า Account Management → Usage Statistics"""
+    """
+    สำหรับหน้า Account Management → Usage Statistics
+
+    Multi-User SaaS: Returns only accounts belonging to current user
+    Admin: Returns all accounts
+    """
     try:
-        accounts = session_manager.get_all_accounts()
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
+        user_id = get_current_user_id()
+        is_admin = session.get('is_admin', False)
+
+        # Data Isolation: Filter by user_id
+        if user_id and not is_admin:
+            if hasattr(session_manager, 'get_accounts_by_user'):
+                accounts = session_manager.get_accounts_by_user(user_id)
+            else:
+                accounts = session_manager.get_all_accounts()
+        else:
+            # Admin or no user (legacy mode)
+            accounts = session_manager.get_all_accounts()
+
         total = len(accounts)
         online = sum(1 for a in accounts if a.get('status') == 'Online')
         offline = max(total - online, 0)
@@ -228,8 +248,28 @@ def health_check():
 
 @system_bp.route('/accounts/stats', methods=['GET'])
 def accounts_stats():
-    """ทางเลือกเบากว่า /health (ส่งตัวเลขล้วน)"""
-    accounts = session_manager.get_all_accounts()
+    """
+    ทางเลือกเบากว่า /health (ส่งตัวเลขล้วน)
+
+    Multi-User SaaS: Returns only stats for accounts belonging to current user
+    Admin: Returns all accounts stats
+    """
+    from flask import session
+    from app.middleware.auth import get_current_user_id
+
+    user_id = get_current_user_id()
+    is_admin = session.get('is_admin', False)
+
+    # Data Isolation: Filter by user_id
+    if user_id and not is_admin:
+        if hasattr(session_manager, 'get_accounts_by_user'):
+            accounts = session_manager.get_accounts_by_user(user_id)
+        else:
+            accounts = session_manager.get_all_accounts()
+    else:
+        # Admin or no user (legacy mode)
+        accounts = session_manager.get_all_accounts()
+
     total = len(accounts)
     online = sum(1 for a in accounts if a.get('status') == 'Online')
     offline = max(total - online, 0)

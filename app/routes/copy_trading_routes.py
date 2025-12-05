@@ -264,6 +264,18 @@ def add_master_to_pair(pair_id):
     }
     '''
     try:
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
+        # Multi-User SaaS: Validate ownership before modification
+        user_id = get_current_user_id()
+        is_admin = session.get('is_admin', False)
+
+        if user_id and hasattr(copy_manager, 'validate_pair_ownership') and not is_admin:
+            if not copy_manager.validate_pair_ownership(pair_id, user_id):
+                logger.warning(f"[ADD_MASTER] Access denied: user {user_id} tried to modify pair {pair_id}")
+                return jsonify({'error': 'Access denied - you do not own this pair'}), 403
+
         data = request.get_json() or {}
         master_account = str(data.get('master_account', '')).strip()
 
@@ -275,6 +287,11 @@ def add_master_to_pair(pair_id):
         if not session_manager.account_exists(master_account):
             system_logs_service.add_log('error', f'❌ [404] Add master failed - Account {master_account} not found')
             return jsonify({'error': f'Master account {master_account} not found'}), 404
+
+        # Multi-User: Verify user owns this account
+        if user_id and hasattr(session_manager, 'validate_account_ownership') and not is_admin:
+            if not session_manager.validate_account_ownership(master_account, user_id):
+                return jsonify({'error': f'Access denied - you do not own account {master_account}'}), 403
 
         # ดึงข้อมูลคู่ที่มีอยู่
         pair = copy_manager.get_pair_by_id(pair_id)
@@ -308,6 +325,7 @@ def add_master_to_pair(pair_id):
         # สร้างคู่ใหม่ด้วย API key เดียวกัน
         new_pair = {
             'id': f"{master_account}_{first_slave}_{int(datetime.now().timestamp())}",
+            'user_id': user_id,  # Multi-User: Assign to current user
             'master_account': master_account,
             'slave_account': first_slave,
             'api_key': api_key,
@@ -371,6 +389,18 @@ def add_slave_to_pair(pair_id):
     }
     '''
     try:
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
+        # Multi-User SaaS: Validate ownership before modification
+        user_id = get_current_user_id()
+        is_admin = session.get('is_admin', False)
+
+        if user_id and hasattr(copy_manager, 'validate_pair_ownership') and not is_admin:
+            if not copy_manager.validate_pair_ownership(pair_id, user_id):
+                logger.warning(f"[ADD_SLAVE] Access denied: user {user_id} tried to modify pair {pair_id}")
+                return jsonify({'error': 'Access denied - you do not own this pair'}), 403
+
         data = request.get_json() or {}
         slave_account = str(data.get('slave_account', '')).strip()
         settings = data.get('settings', {})
@@ -383,6 +413,11 @@ def add_slave_to_pair(pair_id):
         if not session_manager.account_exists(slave_account):
             system_logs_service.add_log('error', f'❌ [404] Add slave failed - Account {slave_account} not found')
             return jsonify({'error': f'Slave account {slave_account} not found'}), 404
+
+        # Multi-User: Verify user owns this account
+        if user_id and hasattr(session_manager, 'validate_account_ownership') and not is_admin:
+            if not session_manager.validate_account_ownership(slave_account, user_id):
+                return jsonify({'error': f'Access denied - you do not own account {slave_account}'}), 403
 
         # ดึงข้อมูลคู่ที่มีอยู่
         pair = copy_manager.get_pair_by_id(pair_id)
@@ -405,6 +440,7 @@ def add_slave_to_pair(pair_id):
         # สร้างคู่ใหม่สำหรับ Slave ตัวใหม่
         new_pair = {
             'id': f"{master_account}_{slave_account}_{int(datetime.now().timestamp())}",
+            'user_id': user_id,  # Multi-User: Assign to current user
             'master_account': master_account,
             'slave_account': slave_account,
             'api_key': api_key,
@@ -453,14 +489,24 @@ def add_slave_to_pair(pair_id):
 @copy_trading_bp.route('/api/copy/master-accounts', methods=['GET'])
 @require_auth
 def get_master_accounts():
-    """ดึงรายการ Master Accounts ทั้งหมด"""
+    """ดึงรายการ Master Accounts (Multi-User: filtered by current user)"""
     try:
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
         master_file = Path('data/master_accounts.json')
         if master_file.exists():
             with open(master_file, 'r', encoding='utf-8') as f:
                 masters = json.load(f)
         else:
             masters = []
+
+        # Multi-User: Filter by current user (admins see all)
+        user_id = get_current_user_id()
+        is_admin = session.get('is_admin', False)
+
+        if user_id and not is_admin:
+            masters = [m for m in masters if m.get('user_id') == user_id]
 
         return jsonify({'accounts': masters})
 
@@ -472,8 +518,11 @@ def get_master_accounts():
 @copy_trading_bp.route('/api/copy/master-accounts', methods=['POST'])
 @require_auth
 def add_master_account():
-    """เพิ่ม Master Account"""
+    """เพิ่ม Master Account (Multi-User SaaS: assigned to current user)"""
     try:
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
         data = request.get_json() or {}
         account = str(data.get('account', '')).strip()
         nickname = str(data.get('nickname', '')).strip()
@@ -481,11 +530,19 @@ def add_master_account():
         if not account:
             return jsonify({'error': 'Account number is required'}), 400
 
+        # Get current user_id
+        user_id = get_current_user_id()
+
         # ถ้า account ยังไม่มีใน Account Management ให้สร้างใหม่
         if not session_manager.account_exists(account):
-            if not session_manager.add_remote_account(account, nickname):
-                return jsonify({'error': f'Failed to create account {account}'}), 500
-            logger.info(f"[API] Created new account in Account Management: {account}")
+            # Use user-aware method for Multi-User
+            if hasattr(session_manager, 'add_remote_account_with_user') and user_id:
+                if not session_manager.add_remote_account_with_user(account, nickname, user_id):
+                    return jsonify({'error': f'Failed to create account {account}'}), 500
+            else:
+                if not session_manager.add_remote_account(account, nickname):
+                    return jsonify({'error': f'Failed to create account {account}'}), 500
+            logger.info(f"[API] Created new account in Account Management: {account} (user: {user_id})")
 
         # โหลดรายการเดิม
         master_file = Path('data/master_accounts.json')
@@ -495,15 +552,24 @@ def add_master_account():
         else:
             masters = []
 
-        # ตรวจสอบว่ามีอยู่แล้วหรือไม่
-        if any(m.get('account') == account for m in masters):
-            return jsonify({'error': 'Master account already exists'}), 400
+        # Multi-User: Filter by current user (admins see all)
+        is_admin = session.get('is_admin', False)
 
-        # เพิ่ม account ใหม่
+        # ตรวจสอบว่ามีอยู่แล้วหรือไม่ (for this user)
+        if not is_admin:
+            user_masters = [m for m in masters if m.get('user_id') == user_id]
+            if any(m.get('account') == account for m in user_masters):
+                return jsonify({'error': 'Master account already exists'}), 400
+        else:
+            if any(m.get('account') == account for m in masters):
+                return jsonify({'error': 'Master account already exists'}), 400
+
+        # เพิ่ม account ใหม่ with user_id
         new_master = {
             'id': str(int(datetime.now().timestamp() * 1000)),
             'account': account,
-            'nickname': nickname
+            'nickname': nickname,
+            'user_id': user_id  # Multi-User: Assign to current user
         }
 
         masters.append(new_master)
@@ -590,14 +656,24 @@ def delete_master_account(account_id):
 @copy_trading_bp.route('/api/copy/slave-accounts', methods=['GET'])
 @require_auth
 def get_slave_accounts():
-    """ดึงรายการ Slave Accounts ทั้งหมด"""
+    """ดึงรายการ Slave Accounts (Multi-User: filtered by current user)"""
     try:
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
         slave_file = Path('data/slave_accounts.json')
         if slave_file.exists():
             with open(slave_file, 'r', encoding='utf-8') as f:
                 slaves = json.load(f)
         else:
             slaves = []
+
+        # Multi-User: Filter by current user (admins see all)
+        user_id = get_current_user_id()
+        is_admin = session.get('is_admin', False)
+
+        if user_id and not is_admin:
+            slaves = [s for s in slaves if s.get('user_id') == user_id]
 
         return jsonify({'accounts': slaves})
 
@@ -609,8 +685,11 @@ def get_slave_accounts():
 @copy_trading_bp.route('/api/copy/slave-accounts', methods=['POST'])
 @require_auth
 def add_slave_account():
-    """เพิ่ม Slave Account"""
+    """เพิ่ม Slave Account (Multi-User SaaS: assigned to current user)"""
     try:
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
         data = request.get_json() or {}
         account = str(data.get('account', '')).strip()
         nickname = str(data.get('nickname', '')).strip()
@@ -618,11 +697,19 @@ def add_slave_account():
         if not account:
             return jsonify({'error': 'Account number is required'}), 400
 
+        # Get current user_id
+        user_id = get_current_user_id()
+
         # ถ้า account ยังไม่มีใน Account Management ให้สร้างใหม่
         if not session_manager.account_exists(account):
-            if not session_manager.add_remote_account(account, nickname):
-                return jsonify({'error': f'Failed to create account {account}'}), 500
-            logger.info(f"[API] Created new account in Account Management: {account}")
+            # Use user-aware method for Multi-User
+            if hasattr(session_manager, 'add_remote_account_with_user') and user_id:
+                if not session_manager.add_remote_account_with_user(account, nickname, user_id):
+                    return jsonify({'error': f'Failed to create account {account}'}), 500
+            else:
+                if not session_manager.add_remote_account(account, nickname):
+                    return jsonify({'error': f'Failed to create account {account}'}), 500
+            logger.info(f"[API] Created new account in Account Management: {account} (user: {user_id})")
 
         # โหลดรายการเดิม
         slave_file = Path('data/slave_accounts.json')
@@ -632,15 +719,24 @@ def add_slave_account():
         else:
             slaves = []
 
-        # ตรวจสอบว่ามีอยู่แล้วหรือไม่
-        if any(s.get('account') == account for s in slaves):
-            return jsonify({'error': 'Slave account already exists'}), 400
+        # Multi-User: Filter by current user (admins see all)
+        is_admin = session.get('is_admin', False)
 
-        # เพิ่ม account ใหม่
+        # ตรวจสอบว่ามีอยู่แล้วหรือไม่ (for this user)
+        if not is_admin:
+            user_slaves = [s for s in slaves if s.get('user_id') == user_id]
+            if any(s.get('account') == account for s in user_slaves):
+                return jsonify({'error': 'Slave account already exists'}), 400
+        else:
+            if any(s.get('account') == account for s in slaves):
+                return jsonify({'error': 'Slave account already exists'}), 400
+
+        # เพิ่ม account ใหม่ with user_id
         new_slave = {
             'id': str(int(datetime.now().timestamp() * 1000)),
             'account': account,
-            'nickname': nickname
+            'nickname': nickname,
+            'user_id': user_id  # Multi-User: Assign to current user
         }
 
         slaves.append(new_slave)
