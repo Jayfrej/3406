@@ -496,21 +496,15 @@ class AccountsModule {
     if (webhookEndpointElement && webhookUrl) webhookEndpointElement.textContent = webhookUrl;
     if (webhookEndpointSystemElement && webhookUrl) webhookEndpointSystemElement.textContent = webhookUrl;
 
-    // Update Copy Trading Endpoint
+    // Update Copy Trading Endpoint - ใช้ URL เดียวกับ Webhook (unified endpoint)
+    // รูปแบบใหม่: https://yourdomain.com/{license_key}
     const copyTradingEndpointSystemElement = document.getElementById('copyTradingEndpointSystem');
     if (copyTradingEndpointSystemElement) {
-      try {
-        let baseUrl = '';
-        if (webhookUrl) {
-          const url = new URL(webhookUrl);
-          baseUrl = `${url.protocol}//${url.host}`;
-        } else {
-          baseUrl = `${window.location.protocol}//${window.location.host}`;
-        }
-        const copyTradingEndpoint = `${baseUrl}/api/copy/trade`;
-        copyTradingEndpointSystemElement.textContent = copyTradingEndpoint;
-      } catch (e) {
-        copyTradingEndpointSystemElement.textContent = 'Error: Invalid URL';
+      // ใช้ URL เดียวกับ Webhook URL เพราะ unified endpoint รองรับทั้ง 2 อัน
+      if (webhookUrl) {
+        copyTradingEndpointSystemElement.textContent = webhookUrl;
+      } else {
+        copyTradingEndpointSystemElement.textContent = 'Loading...';
       }
     }
   }

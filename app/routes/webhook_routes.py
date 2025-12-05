@@ -71,31 +71,48 @@ def get_webhook_url():
 
     In Multi-User mode:
     - Requires authentication
-    - Returns user-specific webhook URL from user_tokens table
+    - Returns user-specific webhook URL using license_key format
+    - URL format: https://yourdomain.com/{license_key}
 
     In Legacy mode (no user logged in):
     - Returns legacy WEBHOOK_TOKEN URL if configured
 
     Reference: MIGRATION_ROADMAP.md Phase 3.1
+    Updated: Now uses license_key format (/{license_key}) instead of /webhook/{token}
     """
     from app.middleware.auth import get_current_user_id
 
     user_id = get_current_user_id()
 
     if user_id:
-        # Multi-User SaaS: Return user-specific webhook URL
+        # Multi-User SaaS: Return user-specific webhook URL using license_key
         try:
-            from app.services.token_service import TokenService
-            token_service = TokenService()
-            webhook_url = token_service.get_webhook_url(user_id)
+            from app.services.user_service import UserService
+            user_service = UserService()
 
-            if webhook_url:
-                return jsonify({'url': webhook_url, 'user_id': user_id})
+            # Get user credentials which include license_key
+            credentials = user_service.get_user_credentials(user_id)
+
+            if credentials and credentials.get('license_key'):
+                # Return URL in new format: /{license_key}
+                webhook_url = f"{EXTERNAL_BASE_URL}/{credentials['license_key']}"
+                return jsonify({
+                    'url': webhook_url,
+                    'user_id': user_id,
+                    'license_key': credentials['license_key']
+                })
             else:
-                # Generate new token for user
-                token = token_service.generate_webhook_token(user_id)
-                webhook_url = f"{EXTERNAL_BASE_URL}/webhook/{token}"
-                return jsonify({'url': webhook_url, 'user_id': user_id})
+                # Try to generate license_key if not exists
+                license_key = user_service.get_user_license_key(user_id)
+                if license_key:
+                    webhook_url = f"{EXTERNAL_BASE_URL}/{license_key}"
+                    return jsonify({
+                        'url': webhook_url,
+                        'user_id': user_id,
+                        'license_key': license_key
+                    })
+                else:
+                    return jsonify({'error': 'Failed to get license key'}), 500
         except Exception as e:
             logger.error(f"[WEBHOOK_URL] Error getting user webhook: {e}")
             return jsonify({'error': 'Failed to get webhook URL'}), 500

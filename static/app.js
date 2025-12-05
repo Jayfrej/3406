@@ -870,22 +870,15 @@ async loadData() {
   if (webhookEndpointElement && this.webhookUrl) webhookEndpointElement.textContent = this.webhookUrl;
   if (webhookEndpointSystemElement && this.webhookUrl) webhookEndpointSystemElement.textContent = this.webhookUrl;
   
-  // ✅ อัปเดต Copy Trading Endpoint
+  // ✅ อัปเดต Copy Trading Endpoint - ใช้ URL เดียวกับ Webhook
+  // รูปแบบใหม่: https://yourdomain.com/{license_key} (ใช้ได้ทั้ง Webhook และ Copy Trading)
   const copyTradingEndpointSystemElement = document.getElementById('copyTradingEndpointSystem');
   if (copyTradingEndpointSystemElement) {
-    // แปลง Webhook URL เป็น Copy Trading Endpoint
-    try {
-      let baseUrl = '';
-      if (this.webhookUrl) {
-        const url = new URL(this.webhookUrl);
-        baseUrl = `${url.protocol}//${url.host}`;
-      } else {
-        baseUrl = `${window.location.protocol}//${window.location.host}`;
-      }
-      const copyTradingEndpoint = `${baseUrl}/api/copy/trade`;
-      copyTradingEndpointSystemElement.textContent = copyTradingEndpoint;
-    } catch (e) {
-      copyTradingEndpointSystemElement.textContent = 'Error: Invalid URL';
+    // ใช้ URL เดียวกับ Webhook URL เพราะ unified endpoint รองรับทั้ง 2 อัน
+    if (this.webhookUrl) {
+      copyTradingEndpointSystemElement.textContent = this.webhookUrl;
+    } else {
+      copyTradingEndpointSystemElement.textContent = 'Loading...';
     }
   }
 }
