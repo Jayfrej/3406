@@ -745,3 +745,248 @@ def ea_status(license_key: str):
     })
 
 
+# ========================================
+# BROKER API ENDPOINTS (/{license_key}/api/broker/*)
+# ========================================
+
+@unified_bp.route('/<license_key>/api/broker/register', methods=['POST'])
+def broker_register(license_key: str):
+    """
+    EA registers broker/account information
+
+    URL: https://yourdomain.com/{license_key}/api/broker/register
+
+    Body:
+    {
+        "account": "12345678",
+        "broker": "XM Global",
+        "server": "XM-MT5-Real",
+        "balance": 10000.00,
+        "equity": 10050.25,
+        "currency": "USD",
+        "symbols": ["EURUSD", "GBPUSD", "XAUUSD"]
+    }
+    """
+    user, error = _validate_license_and_get_user(license_key)
+    if error:
+        return error
+
+    user_id = user['user_id']
+    user_email = user['email']
+
+    data = request.get_json() or {}
+    account = str(data.get('account', '')).strip()
+    broker = data.get('broker', 'Unknown')
+    server = data.get('server', '')
+    balance = data.get('balance', 0)
+    equity = data.get('equity', 0)
+    currency = data.get('currency', 'USD')
+    symbols = data.get('symbols', [])
+
+    if not account:
+        return jsonify({'success': False, 'error': 'Account number required'}), 400
+
+    logger.info(f"[BROKER_REGISTER] User {user_email}, Account {account}, Broker {broker}")
+
+    # Check if account already exists for this user
+    user_accounts = user_service.get_user_accounts_list(user_id)
+
+    # Register or update account
+    try:
+        if account not in user_accounts:
+            # New account - register it
+            if hasattr(session_manager, 'add_remote_account_with_user'):
+                session_manager.add_remote_account_with_user(account, f"{broker} - {account}", user_id)
+            else:
+                session_manager.add_remote_account(account, f"{broker} - {account}")
+            logger.info(f"[BROKER_REGISTER] ✅ New account {account} registered for {user_email}")
+
+        # Update broker data
+        try:
+            from app.broker_data_manager import BrokerDataManager
+            broker_manager = BrokerDataManager()
+            broker_manager.update_broker_data(account, {
+                'broker': broker,
+                'server': server,
+                'balance': balance,
+                'equity': equity,
+                'currency': currency,
+                'symbols': symbols,
+                'user_id': user_id,
+                'last_update': datetime.now().isoformat()
+            })
+        except Exception as e:
+            logger.warning(f"[BROKER_REGISTER] Could not update broker data: {e}")
+
+        # Update heartbeat
+        try:
+            session_manager.update_account_heartbeat(account)
+        except Exception as e:
+            logger.warning(f"[BROKER_REGISTER] Could not update heartbeat: {e}")
+
+        return jsonify({
+            'success': True,
+            'type': 'broker_register',
+            'user_id': user_id,
+            'account': account,
+            'broker': broker,
+            'status': 'registered',
+            'message': 'Broker data registered successfully'
+        })
+
+    except Exception as e:
+        logger.error(f"[BROKER_REGISTER] Failed: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Failed to register broker: {str(e)}'
+        }), 500
+
+
+# ========================================
+# COMMANDS API ENDPOINTS (/{license_key}/api/commands/*)
+# ========================================
+
+@unified_bp.route('/<license_key>/api/commands/<account>', methods=['GET'])
+def get_commands(license_key: str, account: str):
+    """
+    EA gets pending commands for an account
+
+    URL: https://yourdomain.com/{license_key}/api/commands/{account}
+
+    Query params:
+    ?limit=10  (optional, default 10)
+    """
+    user, error = _validate_license_and_get_user(license_key)
+    if error:
+        return error
+
+    user_id = user['user_id']
+    user_email = user['email']
+    account = str(account).strip()
+
+    if not account:
+        return jsonify({'success': False, 'error': 'Account number required'}), 400
+
+    # Verify account belongs to user
+    user_accounts = user_service.get_user_accounts_list(user_id)
+    if account not in user_accounts:
+        logger.warning(f"[GET_COMMANDS] Unauthorized account {account} for {user_email}")
+        return jsonify({'success': False, 'error': 'Unauthorized account'}), 403
+
+    limit = request.args.get('limit', 10, type=int)
+
+    # Get pending commands
+    commands = []
+    try:
+        if hasattr(session_manager, 'get_pending_command'):
+            command = session_manager.get_pending_command(account)
+            if command:
+                commands.append(command)
+
+        # Also check command queue if exists
+        try:
+            from app.command_queue import CommandQueue
+            cmd_queue = CommandQueue()
+            queued_commands = cmd_queue.get_commands(account, limit=limit)
+            if queued_commands:
+                commands.extend(queued_commands)
+        except Exception as e:
+            logger.debug(f"[GET_COMMANDS] Command queue not available: {e}")
+
+    except Exception as e:
+        logger.warning(f"[GET_COMMANDS] Error getting commands: {e}")
+
+    # Update heartbeat since EA is polling
+    try:
+        session_manager.update_account_heartbeat(account)
+    except Exception:
+        pass
+
+    return jsonify({
+        'success': True,
+        'type': 'get_commands',
+        'user_id': user_id,
+        'account': account,
+        'count': len(commands),
+        'commands': commands
+    })
+
+
+@unified_bp.route('/<license_key>/api/commands/<account>/ack', methods=['POST'])
+def ack_command(license_key: str, account: str):
+    """
+    EA acknowledges command execution
+
+    URL: https://yourdomain.com/{license_key}/api/commands/{account}/ack
+
+    Body:
+    {
+        "command_id": "abc123",
+        "status": "success",
+        "ticket": 123456789,
+        "message": "Order executed successfully"
+    }
+    """
+    user, error = _validate_license_and_get_user(license_key)
+    if error:
+        return error
+
+    user_id = user['user_id']
+    user_email = user['email']
+    account = str(account).strip()
+
+    if not account:
+        return jsonify({'success': False, 'error': 'Account number required'}), 400
+
+    # Verify account belongs to user
+    user_accounts = user_service.get_user_accounts_list(user_id)
+    if account not in user_accounts:
+        logger.warning(f"[ACK_COMMAND] Unauthorized account {account} for {user_email}")
+        return jsonify({'success': False, 'error': 'Unauthorized account'}), 403
+
+    data = request.get_json() or {}
+    command_id = data.get('command_id', '')
+    status = data.get('status', 'unknown')
+    ticket = data.get('ticket')
+    message = data.get('message', '')
+
+    logger.info(f"[ACK_COMMAND] User {user_email}, Account {account}, Command {command_id}, Status {status}")
+
+    # Mark command as executed
+    try:
+        if hasattr(session_manager, 'mark_command_executed'):
+            session_manager.mark_command_executed(account, command_id, status, ticket)
+
+        # Also try command queue
+        try:
+            from app.command_queue import CommandQueue
+            cmd_queue = CommandQueue()
+            cmd_queue.acknowledge_command(command_id, status, ticket, message)
+        except Exception:
+            pass
+
+    except Exception as e:
+        logger.warning(f"[ACK_COMMAND] Error acknowledging command: {e}")
+
+    # Log result
+    if status == 'success':
+        system_logs_service.add_log(
+            'success',
+            f'✅ Command executed: Account {account}, Ticket {ticket}',
+            user_id=user_id
+        )
+    else:
+        system_logs_service.add_log(
+            'error',
+            f'❌ Command failed: Account {account}, {message}',
+            user_id=user_id
+        )
+
+    return jsonify({
+        'success': True,
+        'type': 'ack_command',
+        'user_id': user_id,
+        'account': account,
+        'command_id': command_id,
+        'acknowledged': True
+    })
