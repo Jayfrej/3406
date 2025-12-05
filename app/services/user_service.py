@@ -356,3 +356,40 @@ class UserService:
         finally:
             conn.close()
 
+    def get_first_admin(self) -> Optional[dict]:
+        """
+        Get the first admin user from the database.
+
+        Used for legacy session fallback when admin_001 might not exist.
+
+        Returns:
+            dict: Admin user data or None if no admin exists
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT user_id, email, name, picture, created_at, last_login, is_active, is_admin
+                FROM users 
+                WHERE is_admin = 1 AND is_active = 1
+                ORDER BY created_at ASC
+                LIMIT 1
+            """)
+
+            row = cursor.fetchone()
+            if row:
+                return {
+                    'user_id': row[0],
+                    'email': row[1],
+                    'name': row[2],
+                    'picture': row[3],
+                    'created_at': row[4],
+                    'last_login': row[5],
+                    'is_active': bool(row[6]),
+                    'is_admin': bool(row[7])
+                }
+            return None
+
+        finally:
+            conn.close()

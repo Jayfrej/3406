@@ -29,45 +29,53 @@ A sophisticated web application designed to receive webhook signals from platfor
 
 ## System Architecture
 
-### Complete System Overview
+### Complete System Overview (v3.0 - Multi-User SaaS)
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                     MT5 MULTI-ACCOUNT TRADING BOT SYSTEM                                           │
-│                                          (Webhook + Copy Trading)                                                  │
+│                                     MT5 MULTI-USER SAAS TRADING PLATFORM                                           │
+│                              (Webhook + Copy Trading + Google OAuth + Data Isolation)                              │
 └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
-┌──────────────────────┐                                                          ┌──────────────────────────────────┐
-│   SIGNAL SOURCES     │                                                          │     SERVER COMPONENTS            │
-│                      │                                                          │  (project-root/)                 │
-│  • TradingView       │                 POST /webhook/{TOKEN}                    │                                  │
-│  • Pine Script       │────────────────────────────────────────────────────────> │  server.py                       │
-│  • Custom Bots       │                 JSON Payload                             │  ├─ app/                         │
-│  • Manual Trading    │                                                          │  │  ├─ session_manager.py         │
-└──────────────────────┘                                                          │  │  ├─ symbol_mapper.py           │
-                                                                                  │  │  ├─ email_handler.py           │
-                                                                                  │  │  ├─ trades.py                  │
-                        ┌─────────────────────────────────────────────┐          │  │  └─ copy_trading/              │
-                        │         FLASK SERVER (localhost:5000)       │          │  │      ├─ copy_manager.py        │
-                        │  ┌───────────────────────────────────────┐  │          │  │      ├─ copy_handler.py        │
-                        │  │  1. Authentication                     │  │          │  │      ├─ copy_executor.py       │
-                        │  │     • Basic Auth (username/password)   │  │          │  │      ├─ copy_history.py        │
-                        │  │     • API Key validation               │  │          │  │      └─ balance_helper.py      │
-                        │  │  2. Rate Limiting                      │  │          │  ├─ static/                       │
-                        │  │     • 10 req/min (Webhook)            │  │          │  │  ├─ index.html                 │
-                        │  │     • 20 req/min (API)                │  │          │  │  ├─ style.css                  │
-                        │  │  3. Symbol Mapping                     │  │          │  │  └─ app.js                     │
-                        │  │     • XAUUSDM → XAUUSD                │  │          │  ├─ data/                         │
-                        │  │     • Fuzzy matching                   │  │          │  │  ├─ accounts.db                │
-                        │  └───────────────────────────────────────┘  │          │  │  ├─ custom_mappings.json       │
-                        └──────────────┬──────────────────────────────┘          │  │  ├─ copy_pairs.json (v2.0)     │
-                                       │                                         │  │  └─ copy_history.json (v2.0)   │
-                                       │                                         │  ├─ logs/                          │
-                ┌──────────────────────┼──────────────────────┐                 │  │  └─ trading_bot.log             │
-                │                      │                      │                 │  ├─ mt5_instances/                 │
-                ▼                      ▼                      ▼                 │  ├─ backup/                        │
-    ┌───────────────────┐  ┌────────────────────┐  ┌──────────────────┐       │  └─ .env                           │
-    │ WEBHOOK HANDLER   │  │  COPY TRADING      │  │  EMAIL HANDLER   │       └──────────────────────────────────┘
+┌──────────────────────┐     ┌──────────────────────┐                          ┌──────────────────────────────────┐
+│   SIGNAL SOURCES     │     │   AUTHENTICATION     │                          │     SERVER COMPONENTS            │
+│                      │     │                      │                          │  (project-root/)                 │
+│  • TradingView       │     │  ┌────────────────┐  │                          │                                  │
+│  • Pine Script       │     │  │ Google OAuth   │  │  POST /webhook/{TOKEN}   │  server.py                       │
+│  • Custom Bots       │     │  │ 2.0 Login      │──┼────────────────────────> │  ├─ app/                         │
+│  • Manual Trading    │     │  └────────────────┘  │                          │  │  ├─ services/                  │
+└──────────────────────┘     │         │            │                          │  │  │  ├─ user_service.py         │
+                             │         ▼            │                          │  │  │  ├─ token_service.py        │
+                             │  ┌────────────────┐  │                          │  │  │  └─ google_oauth_service.py │
+                             │  │ Per-User       │  │                          │  │  ├─ middleware/                │
+                             │  │ Webhook Token  │  │                          │  │  │  └─ auth.py                 │
+                             │  └────────────────┘  │                          │  │  ├─ session_manager.py         │
+                             └──────────────────────┘                          │  │  ├─ email_handler.py           │
+                                                                               │  │  └─ copy_trading/              │
+                        ┌─────────────────────────────────────────────┐       │  ├─ static/                       │
+                        │         FLASK SERVER (localhost:5000)       │       │  │  ├─ index.html                 │
+                        │  ┌───────────────────────────────────────┐  │       │  │  ├─ login.html                 │
+                        │  │  1. Authentication (v3.0)              │  │       │  │  └─ app.js                     │
+                        │  │     • Google OAuth 2.0 (Primary)       │  │       │  ├─ data/                         │
+                        │  │     • Per-User Webhook Tokens          │  │       │  │  ├─ accounts.db (SQLite)       │
+                        │  │     • Session-based Security           │  │       │  │  │  ├─ users table             │
+                        │  │     • Legacy Basic Auth (Fallback)     │  │       │  │  │  ├─ user_tokens table       │
+                        │  │  2. Data Isolation (CRITICAL)          │  │       │  │  │  └─ accounts table          │
+                        │  │     • All queries filter by user_id    │  │       │  │  ├─ copy_pairs.json            │
+                        │  │     • Users see ONLY their own data    │  │       │  │  └─ api_keys.json              │
+                        │  │  3. Rate Limiting                      │  │       │  ├─ logs/                          │
+                        │  │     • 10 req/min (Webhook)             │  │       │  └─ .env                           │
+                        │  │  4. Symbol Mapping                     │  │       └──────────────────────────────────┘
+                        │  │     • Auto-mapping between brokers     │  │
+                        │  └───────────────────────────────────────┘  │
+                        └──────────────┬──────────────────────────────┘
+                                       │
+                                       │
+                ┌──────────────────────┼──────────────────────┐
+                │                      │                      │
+                ▼                      ▼                      ▼
+    ┌───────────────────┐  ┌────────────────────┐  ┌──────────────────┐
+    │ WEBHOOK HANDLER   │  │  COPY TRADING      │  │  EMAIL HANDLER   │
     │ (TradingView)     │  │  (Master/Slave)    │  │  (Notifications) │
     │                   │  │                    │  │                  │
     │ Process:          │  │ Process:           │  │ Send Alerts:     │       ┌──────────────────────────────────┐
@@ -944,3 +952,344 @@ data/copy_history.json      # Last 1000 copy events
 **EA Version**: All-in-One Trading EA v2.2
 
 ---
+
+---
+
+# 🚀 Update 3.0 - Multi-User SaaS Platform (December 5, 2025)
+
+### Overview
+
+Version 3.0 transforms the MT5 Trading Bot from a single-user system into a **Multi-Tenant SaaS Platform** with Google OAuth authentication, per-user data isolation, and enterprise-grade security.
+
+---
+
+### 🔑 Key Features
+
+#### 1. Google OAuth 2.0 Authentication
+
+- **One-Click Login**: Sign in with Google account - no password management
+- **Secure Sessions**: Server-side session management with secure cookies
+- **Auto User Creation**: New users automatically provisioned on first login
+- **Profile Integration**: User name and picture synced from Google
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    AUTHENTICATION FLOW                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  [User] ──► /login ──► [Google OAuth] ──► /auth/callback        │
+│                              │                                  │
+│                              ▼                                  │
+│                    ┌─────────────────┐                         │
+│                    │ Create/Update   │                         │
+│                    │ User in DB      │                         │
+│                    └────────┬────────┘                         │
+│                             │                                   │
+│                             ▼                                   │
+│                    ┌─────────────────┐                         │
+│                    │ Generate        │                         │
+│                    │ Webhook Token   │                         │
+│                    └────────┬────────┘                         │
+│                             │                                   │
+│                             ▼                                   │
+│                    ┌─────────────────┐                         │
+│                    │ Set Session     │                         │
+│                    │ Redirect to /   │                         │
+│                    └─────────────────┘                         │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### 2. Per-User Webhook Tokens
+
+- **Unique Token Per User**: Each user gets their own webhook URL
+- **Token Management**: View, copy, and rotate tokens from dashboard
+- **Legacy Support**: Old `WEBHOOK_TOKEN` still works for backward compatibility
+
+```
+User A: POST /webhook/whk_abc123...  → Only User A's accounts
+User B: POST /webhook/whk_xyz789...  → Only User B's accounts
+Legacy: POST /webhook/{WEBHOOK_TOKEN} → Admin accounts (fallback)
+```
+
+#### 3. Strict Data Isolation
+
+- **Database Level**: All queries filter by `user_id`
+- **JSON Files**: Copy pairs tagged with owner `user_id`
+- **API Security**: Users can ONLY see/modify their own data
+
+```sql
+-- Every query enforces isolation:
+SELECT * FROM accounts WHERE user_id = ?
+SELECT * FROM copy_pairs WHERE user_id = ?
+```
+
+#### 4. Admin Dashboard
+
+- **User Management**: View all users, toggle active status
+- **System Overview**: Global statistics across all users
+- **Support Access**: Admins can view data for troubleshooting
+
+#### 5. Enhanced Security
+
+- **Session-Based Auth**: No more Basic Auth for UI (optional fallback)
+- **CSRF Protection**: State validation in OAuth flow
+- **Type-Safe Queries**: Parameterized SQL prevents injection
+- **Proper HTTP Codes**: 401 (Unauthorized) vs 403 (Forbidden)
+
+---
+
+### 📊 Database Schema (v3.0)
+
+```sql
+-- NEW: Users table
+CREATE TABLE users (
+    user_id TEXT PRIMARY KEY,        -- 'user_john_abc123'
+    email TEXT UNIQUE NOT NULL,      -- Google email
+    name TEXT,                       -- Display name
+    picture TEXT,                    -- Profile picture URL
+    is_active INTEGER DEFAULT 1,     -- Account enabled
+    is_admin INTEGER DEFAULT 0,      -- Admin privileges
+    created_at TEXT,
+    last_login TEXT
+);
+
+-- NEW: Per-user webhook tokens
+CREATE TABLE user_tokens (
+    token_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    webhook_token TEXT UNIQUE NOT NULL,  -- 'whk_xxx...'
+    webhook_url TEXT,
+    created_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
+-- UPDATED: Accounts now linked to users
+CREATE TABLE accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account TEXT UNIQUE,
+    nickname TEXT,
+    status TEXT DEFAULT 'inactive',
+    broker TEXT,
+    user_id TEXT,                    -- NEW: Owner
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+```
+
+---
+
+### 🛠️ New API Endpoints
+
+#### Authentication Routes
+```
+GET  /login              # Login page
+GET  /login/google       # Start Google OAuth
+GET  /auth/callback      # OAuth callback
+POST /logout             # Clear session
+GET  /auth/status        # Check auth status
+GET  /auth/webhook-token # Get user's webhook token
+POST /auth/rotate-token  # Generate new token
+```
+
+#### User Management (Admin)
+```
+GET  /api/admin/users           # List all users
+POST /api/admin/users/:id/toggle # Enable/disable user
+GET  /api/admin/stats           # System statistics
+```
+
+---
+
+### 🚀 Simple Setup Flow
+
+#### Step 1: Configure Google OAuth
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create project → Enable OAuth consent screen
+3. Create OAuth 2.0 credentials
+4. Add authorized redirect URI: `http://localhost:5000/auth/google/callback`
+5. Copy Client ID and Secret
+
+#### Step 2: Update Environment
+
+```env
+# Add to .env
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+ADMIN_EMAIL=your-admin@gmail.com
+SECRET_KEY=your-secure-random-key
+```
+
+#### Step 3: Run Setup
+
+```bash
+python setup.py
+```
+
+The setup wizard will:
+- ✅ Detect existing database
+- ✅ Create new tables (users, user_tokens)
+- ✅ Add user_id column to accounts
+- ✅ Migrate existing data to admin user
+- ✅ Preserve all existing configurations
+
+#### Step 4: Start Server
+
+```bash
+python server.py
+```
+
+#### Step 5: Login
+
+1. Open `http://localhost:5000`
+2. Click "Sign in with Google"
+3. Authorize the application
+4. You're in! 🎉
+
+---
+
+### 📋 Migration Guide
+
+#### From v2.0 to v3.0
+
+**Automatic Migration:**
+- All existing accounts assigned to admin user
+- All existing copy pairs tagged with admin user_id
+- Webhook routes support both old and new tokens
+
+**Manual Steps:**
+1. Update `.env` with Google OAuth credentials
+2. Run `python setup.py` to migrate database
+3. Restart server
+
+**Backward Compatibility:**
+- Old `WEBHOOK_TOKEN` still works (maps to admin)
+- Basic Auth fallback available during transition
+- All v2.0 API endpoints unchanged
+
+---
+
+### 🔐 Security Best Practices
+
+#### Production Deployment
+
+```env
+# Required for production
+GOOGLE_CLIENT_ID=xxx
+GOOGLE_CLIENT_SECRET=xxx
+SECRET_KEY=<random-64-char-string>
+ADMIN_EMAIL=admin@yourdomain.com
+
+# HTTPS required for OAuth
+EXTERNAL_BASE_URL=https://trading.yourdomain.com
+```
+
+#### OAuth Redirect URIs
+
+For production, add to Google Console:
+```
+https://trading.yourdomain.com/auth/google/callback
+```
+
+---
+
+### 📁 New File Structure
+
+```
+app/
+├─ services/                 # NEW: Business logic services
+│  ├─ user_service.py        # User CRUD operations
+│  ├─ token_service.py       # Webhook token management
+│  ├─ google_oauth_service.py # OAuth flow handling
+│  └─ auth_service.py        # Authentication helpers
+├─ middleware/
+│  └─ auth.py                # UPDATED: OAuth + session auth
+├─ routes/
+│  ├─ auth_routes.py         # NEW: OAuth endpoints
+│  └─ ... (existing routes updated for multi-user)
+└─ core/
+   ├─ app_factory.py         # UPDATED: OAuth integration
+   └─ database_init.py       # UPDATED: New schema
+
+static/
+├─ login.html                # NEW: Google OAuth login page
+└─ index.html                # UPDATED: Session-based auth
+
+data/
+└─ accounts.db               # UPDATED: users, user_tokens tables
+```
+
+---
+
+### 🧪 Testing
+
+**Multi-User Isolation Test:**
+```bash
+python tests/test_multi_user_isolation.py
+```
+
+**Expected Output:**
+```
+✅ PASS: database_schema
+✅ PASS: json_files
+✅ PASS: session_manager
+✅ PASS: copy_manager
+
+All tests passed!
+```
+
+---
+
+### ⚠️ Breaking Changes
+
+1. **Login Required**: Dashboard now requires Google login
+2. **User-Scoped Data**: APIs return only current user's data
+3. **Webhook URLs**: New per-user token format
+
+**Mitigation:**
+- Legacy `WEBHOOK_TOKEN` still supported
+- Admin users see all data
+- Basic Auth fallback available
+
+---
+
+### 🐛 Bug Fixes in v3.0
+
+- **Fixed**: `datatype mismatch` error in token generation
+- **Fixed**: Hardcoded `admin_001` fallback now dynamically finds admin
+- **Fixed**: Type hints for authentication functions
+- **Fixed**: Schema consistency across all database operations
+
+---
+
+### 📚 Documentation Updates
+
+- System Architecture diagram updated for Multi-User model
+- New authentication flow documentation
+- API endpoint changes documented
+- Migration guide included
+
+---
+
+**Version 3.0.0 - Multi-User SaaS Platform**  
+**Release Date**: December 5, 2025  
+**Compatible**: MT5 Build 3801+, Python 3.8+, Windows 10/11  
+**EA Version**: All-in-One Trading EA v2.2  
+**New Requirements**: Google OAuth credentials
+
+---
+
+### 🎯 What's Next (Roadmap)
+
+- **v3.1**: User dashboard with personal statistics
+- **v3.2**: Team/organization support
+- **v3.3**: API rate limits per user tier
+- **v4.0**: Multi-broker support
+
+---
+
+**Thank you for using MT5 Multi-User Trading Platform!**  
+Questions? Issues? Create a ticket or contact support.
+
+---
+

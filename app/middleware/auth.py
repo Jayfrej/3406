@@ -115,7 +115,9 @@ def require_auth(f):
     return decorated
 
 
-def get_current_user_id() -> str:
+from typing import Optional
+
+def get_current_user_id() -> Optional[str]:
     """
     Get current user_id from session.
 
@@ -127,14 +129,23 @@ def get_current_user_id() -> str:
     if user_id:
         return user_id
 
-    # Fallback for legacy sessions - return default admin
+    # Fallback for legacy sessions - find first admin user from database
     if session.get('auth'):
+        try:
+            from app.services.user_service import UserService
+            user_service = UserService()
+            admin_user = user_service.get_first_admin()
+            if admin_user:
+                return admin_user.get('user_id', 'admin_001')
+        except Exception:
+            pass
+        # Ultimate fallback if database lookup fails
         return 'admin_001'
 
     return None
 
 
-def get_current_user_email() -> str:
+def get_current_user_email() -> Optional[str]:
     """
     Get current user's email from session.
 

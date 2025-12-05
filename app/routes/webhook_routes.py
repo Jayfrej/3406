@@ -175,8 +175,15 @@ def webhook_handler(token):
     # Legacy fallback: Check against WEBHOOK_TOKEN env var
     if not user_id:
         if LEGACY_WEBHOOK_TOKEN and token == LEGACY_WEBHOOK_TOKEN:
-            user_id = 'admin_001'  # Default admin for legacy tokens
-            logger.info(f"[WEBHOOK] Legacy token validated, using admin user")
+            # Find first admin user dynamically instead of hardcoding admin_001
+            try:
+                from app.services.user_service import UserService
+                user_service = UserService()
+                admin_user = user_service.get_first_admin()
+                user_id = admin_user.get('user_id') if admin_user else 'admin_001'
+            except Exception:
+                user_id = 'admin_001'  # Ultimate fallback
+            logger.info(f"[WEBHOOK] Legacy token validated, using admin user: {user_id}")
         else:
             logger.warning("[UNAUTHORIZED] invalid webhook token")
             system_logs_service.add_log('error', '🔒 [401] Webhook unauthorized - Invalid token')

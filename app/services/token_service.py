@@ -68,13 +68,13 @@ class TokenService:
                     break
 
             # Create token record
-            token_id = f"tok_{secrets.token_urlsafe(16)}"
+            # Note: token_id is INTEGER AUTOINCREMENT, so we don't insert it
             now = datetime.now().isoformat()
 
             cursor.execute("""
-                INSERT INTO user_tokens (token_id, user_id, webhook_token, created_at)
-                VALUES (?, ?, ?, ?)
-            """, (token_id, user_id, token, now))
+                INSERT INTO user_tokens (user_id, webhook_token, created_at)
+                VALUES (?, ?, ?)
+            """, (user_id, token, now))
             conn.commit()
 
             logger.info(f"[TOKEN_SERVICE] Generated webhook token for user: {user_id}")
