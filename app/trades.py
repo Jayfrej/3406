@@ -202,7 +202,12 @@ def get_trades():
       - symbol : e.g., XAUUSD
       - account: account number
       - since  : ISO8601 (UTC) e.g., 2025-09-30T00:00:00Z
+
+    Multi-User SaaS: Returns only trades for accounts belonging to current user
     """
+    from flask import session
+    from app.middleware.auth import get_current_user_id
+
     limit = int(request.args.get("limit", 100))
     limit = max(1, min(limit, 1000))
 
@@ -211,10 +216,31 @@ def get_trades():
     account = request.args.get("account") or None
     since = request.args.get("since") or None
 
+    # Get user's allowed accounts for filtering
+    user_id = get_current_user_id()
+    is_admin = session.get('is_admin', False)
+    user_accounts = None
+
+    if user_id and not is_admin:
+        # Get list of accounts belonging to this user
+        try:
+            from app.services.account_allowlist_service import AccountAllowlistService
+            allowlist_service = AccountAllowlistService()
+            user_webhook_accounts = allowlist_service.get_webhook_allowlist_by_user(user_id)
+            user_accounts = set(str(a.get('account', '')) for a in user_webhook_accounts)
+        except Exception as e:
+            current_app.logger.warning(f"[TRADES] Failed to get user accounts: {e}")
+            user_accounts = set()
+
     with _lock:
         result: List[Dict[str, Any]] = []
         for evt in _buffer:
             if _match(evt, status, symbol, account, since):
+                # Filter by user's accounts if not admin
+                if user_accounts is not None:
+                    evt_account = str(evt.get("account", evt.get("account_number", "")))
+                    if evt_account not in user_accounts:
+                        continue
                 result.append(evt)
                 if len(result) >= limit:
                     break

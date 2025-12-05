@@ -39,8 +39,28 @@ def init_system_routes(sls, sm):
 @system_bp.route('/api/system/logs', methods=['GET'])
 @require_auth
 def get_system_logs():
-    """ดึง system logs"""
+    """
+    ดึง system logs (Admin Only for Multi-User SaaS)
+
+    System logs contain cross-user information and should only be visible to admins.
+    Regular users will receive an empty log list.
+    """
     try:
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
+        user_id = get_current_user_id()
+        is_admin = session.get('is_admin', False)
+
+        # Only admins can see system logs (contains cross-user data)
+        if not is_admin:
+            return jsonify({
+                'success': True,
+                'logs': [],
+                'total': 0,
+                'message': 'System logs are admin-only'
+            }), 200
+
         limit = int(request.args.get('limit', 300))
         limit = max(1, min(limit, 300))
 
@@ -60,8 +80,14 @@ def get_system_logs():
 @system_bp.route('/api/system/logs/clear', methods=['POST'])
 @require_auth
 def clear_system_logs():
-    """ล้าง system logs ทั้งหมด"""
+    """ล้าง system logs ทั้งหมด (Admin Only)"""
     try:
+        from flask import session
+
+        is_admin = session.get('is_admin', False)
+        if not is_admin:
+            return jsonify({'error': 'Admin access required'}), 403
+
         system_logs_service.clear_logs()
 
         system_logs_service.add_log('info', 'System logs cleared')

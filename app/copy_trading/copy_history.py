@@ -214,7 +214,8 @@ class CopyHistory:
     # =================== Query History ===================
     
     def get_history(self, limit: int = 100, status: Optional[str] = None, 
-                    master: Optional[str] = None, slave: Optional[str] = None) -> List[Dict]:
+                    master: Optional[str] = None, slave: Optional[str] = None,
+                    user_id: Optional[str] = None, user_accounts: Optional[set] = None) -> List[Dict]:
         """
         ดึงประวัติการคัดลอก
         
@@ -223,7 +224,9 @@ class CopyHistory:
             status: กรอง status ('success' หรือ 'error')
             master: กรองด้วย master account
             slave: กรองด้วย slave account
-            
+            user_id: กรองด้วย user_id (Multi-User SaaS)
+            user_accounts: Set of account numbers belonging to user (for filtering)
+
         Returns:
             List[Dict]: รายการ events (เรียงจากล่าสุดไปเก่าสุด)
         """
@@ -244,7 +247,19 @@ class CopyHistory:
                 # Filter by slave
                 if slave and str(event.get('slave')) != str(slave):
                     continue
-                
+
+                # Filter by user_id if provided (for copy pairs with user_id)
+                if user_id and event.get('user_id') and event.get('user_id') != user_id:
+                    continue
+
+                # Filter by user's accounts if provided
+                if user_accounts is not None:
+                    evt_master = str(event.get('master', ''))
+                    evt_slave = str(event.get('slave', ''))
+                    # Event must involve at least one of user's accounts
+                    if evt_master not in user_accounts and evt_slave not in user_accounts:
+                        continue
+
                 result.append(event)
                 
                 # ถึง limit แล้ว
@@ -253,6 +268,20 @@ class CopyHistory:
             
             return result
     
+    def get_history_by_user(self, user_id: str, limit: int = 100, status: Optional[str] = None) -> List[Dict]:
+        """
+        ดึงประวัติการคัดลอกสำหรับ user เฉพาะ
+
+        Args:
+            user_id: User ID to filter by
+            limit: จำนวน events สูงสุด
+            status: กรอง status
+
+        Returns:
+            List[Dict]: รายการ events ของ user นี้
+        """
+        return self.get_history(limit=limit, status=status, user_id=user_id)
+
     def get_event_by_id(self, event_id: str) -> Optional[Dict]:
         """ดึง event จาก ID"""
         with self._lock:

@@ -581,14 +581,28 @@ def get_all_symbol_mappings():
 @account_bp.route('/webhook-accounts', methods=['GET'])
 @require_auth
 def list_webhook_accounts():
-    """Get list of webhook allowed accounts"""
-    return jsonify({"accounts": account_allowlist_service.get_webhook_allowlist()})
+    """Get list of webhook allowed accounts for current user (Multi-User SaaS)"""
+    from flask import session
+    from app.middleware.auth import get_current_user_id
+
+    user_id = get_current_user_id()
+    is_admin = session.get('is_admin', False)
+
+    # Admins see all accounts, regular users see only their own
+    if is_admin:
+        accounts = account_allowlist_service.get_webhook_allowlist()
+    else:
+        accounts = account_allowlist_service.get_webhook_allowlist_by_user(user_id)
+
+    return jsonify({"accounts": accounts})
 
 
 @account_bp.route('/webhook-accounts', methods=['POST'])
 @require_auth
 def add_webhook_account():
-    """Add or update webhook allowed account"""
+    """Add or update webhook allowed account for current user (Multi-User SaaS)"""
+    from app.middleware.auth import get_current_user_id
+
     data = request.get_json(silent=True) or {}
     account = str(data.get("account") or data.get("id") or "").strip()
 
@@ -598,16 +612,22 @@ def add_webhook_account():
 
     nickname = str(data.get("nickname") or "").strip()
     enabled = bool(data.get("enabled", True))
+    user_id = get_current_user_id()
 
     # If account doesn't exist in Account Management, create it
     if not session_manager.account_exists(account):
-        if not session_manager.add_remote_account(account, nickname):
-            return jsonify({'error': f'Failed to create account {account}'}), 500
-        logger.info(f"[API] Created new account in Account Management: {account}")
+        if hasattr(session_manager, 'add_remote_account_with_user') and user_id:
+            if not session_manager.add_remote_account_with_user(account, nickname, user_id):
+                return jsonify({'error': f'Failed to create account {account}'}), 500
+        else:
+            if not session_manager.add_remote_account(account, nickname):
+                return jsonify({'error': f'Failed to create account {account}'}), 500
+        logger.info(f"[API] Created new account in Account Management: {account} (user: {user_id})")
 
-    # Add to webhook allowlist
-    if account_allowlist_service.add_webhook_account(account, nickname, enabled):
-        status_text = "updated" if any(it["account"] == account for it in account_allowlist_service.get_webhook_allowlist()[:-1]) else "added"
+    # Add to webhook allowlist with user_id
+    if account_allowlist_service.add_webhook_account(account, nickname, enabled, user_id):
+        all_accounts = account_allowlist_service.get_webhook_allowlist_by_user(user_id) if user_id else account_allowlist_service.get_webhook_allowlist()
+        status_text = "updated" if len([a for a in all_accounts if a["account"] == account]) > 0 else "added"
         system_logs_service.add_log('success', f'✅ [200] Webhook account {status_text}: {account} ({nickname})')
         return jsonify({"ok": True, "account": account})
     else:
@@ -617,13 +637,16 @@ def add_webhook_account():
 @account_bp.route('/webhook-accounts/<account>', methods=['DELETE'])
 @require_auth
 def delete_webhook_account(account):
-    """Remove account from webhook allowlist and cleanup associated data"""
+    """Remove account from webhook allowlist and cleanup associated data (Multi-User SaaS)"""
+    from app.middleware.auth import get_current_user_id
+
     try:
         account = str(account)
+        user_id = get_current_user_id()
 
-        # 1. Remove from webhook allowlist
-        if not account_allowlist_service.delete_webhook_account(account):
-            return jsonify({"error": "Failed to delete webhook account"}), 500
+        # 1. Remove from webhook allowlist (with ownership check)
+        if not account_allowlist_service.delete_webhook_account(account, user_id):
+            return jsonify({"error": "Failed to delete webhook account or access denied"}), 500
 
         # 2. 🔥 CASCADE DELETE: Delete trade history for this account
         deleted_history = 0

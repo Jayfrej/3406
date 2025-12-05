@@ -803,14 +803,32 @@ def copy_trade_endpoint():
 @copy_trading_bp.route('/api/copy/history', methods=['GET'])
 @require_auth
 def get_copy_history():
-    """ดึงประวัติการคัดลอก"""
+    """ดึงประวัติการคัดลอก (Multi-User SaaS: filtered by user's accounts)"""
     try:
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
         limit = int(request.args.get('limit', 100))
         status = request.args.get('status')
 
         limit = max(1, min(limit, 1000))
 
-        history = copy_history.get_history(limit=limit, status=status)
+        user_id = get_current_user_id()
+        is_admin = session.get('is_admin', False)
+
+        # Get user's accounts for filtering
+        user_accounts = None
+        if user_id and not is_admin:
+            try:
+                from app.services.account_allowlist_service import AccountAllowlistService
+                allowlist_service = AccountAllowlistService()
+                user_webhook_accounts = allowlist_service.get_webhook_allowlist_by_user(user_id)
+                user_accounts = set(str(a.get('account', '')) for a in user_webhook_accounts)
+            except Exception as e:
+                logger.warning(f"[COPY_HISTORY] Failed to get user accounts: {e}")
+                user_accounts = set()
+
+        history = copy_history.get_history(limit=limit, status=status, user_id=user_id if not is_admin else None, user_accounts=user_accounts)
 
         return jsonify({'history': history, 'count': len(history)})
 
