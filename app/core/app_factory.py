@@ -64,6 +64,24 @@ def create_app():
 
     logger.info("[APP_FACTORY] Initializing application...")
 
+    # =================== Database Initialization (Safety Net) ===================
+    # This ensures database tables exist even if setup.py wasn't run
+    # Uses CREATE TABLE IF NOT EXISTS - safe to run every startup
+    try:
+        from app.core.database_init import ensure_database_schema, verify_database_health
+
+        logger.info("[APP_FACTORY] Checking database schema...")
+        if ensure_database_schema():
+            health = verify_database_health()
+            if health['healthy']:
+                logger.info(f"[APP_FACTORY] ✓ Database healthy - {health['user_count']} users, {health['account_count']} accounts")
+            else:
+                logger.warning(f"[APP_FACTORY] ⚠ Database issue: {health.get('error', 'Unknown')}")
+        else:
+            logger.error("[APP_FACTORY] ✗ Failed to initialize database schema!")
+    except Exception as e:
+        logger.error(f"[APP_FACTORY] ✗ Database init error: {e}")
+
     # =================== Initialize Core Modules ===================
     from app.session_manager import SessionManager
     from app.email_handler import EmailHandler

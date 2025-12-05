@@ -401,52 +401,207 @@ class SetupWizard:
             self.dir_status.config(text=f"✗ Error: {str(e)}", fg=self.accent_red)
     
     def run_database_migrations(self):
-        """Run database migrations to set up multi-user tables"""
+        """
+        Run database migrations to set up multi-user tables.
+        BUILT-IN: ไม่ต้องพึ่งพาไฟล์ภายนอก - รันได้ทุกครั้งอย่างปลอดภัย
+        Uses CREATE TABLE IF NOT EXISTS = safe to run multiple times
+        """
+        import sqlite3
+        from datetime import datetime
+
         migration_results = []
+        db_path = self.base_dir / 'data' / 'accounts.db'
+
+        # Ensure data directory exists
+        db_path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
-            # Migration 001: Add users table
-            migration_001 = self.base_dir / 'migrations' / '001_add_users_table.py'
-            if migration_001.exists():
-                result = subprocess.run(
-                    [sys.executable, str(migration_001)],
-                    capture_output=True,
-                    text=True,
-                    cwd=str(self.base_dir)
+            conn = sqlite3.connect(str(db_path))
+            cursor = conn.cursor()
+
+            # ========================================
+            # TABLE 1: users (Multi-User SaaS)
+            # ========================================
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id TEXT PRIMARY KEY,
+                    email TEXT UNIQUE NOT NULL,
+                    name TEXT,
+                    picture TEXT,
+                    is_active INTEGER DEFAULT 1,
+                    is_admin INTEGER DEFAULT 0,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    last_login TEXT
                 )
-                if result.returncode == 0:
-                    migration_results.append("✓ Database schema created")
+            ''')
+            migration_results.append("✓ Table 'users' ready")
+
+            # ========================================
+            # TABLE 2: user_tokens (Webhook tokens per user)
+            # ========================================
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS user_tokens (
+                    token_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
+                    webhook_token TEXT UNIQUE NOT NULL,
+                    webhook_url TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(user_id)
+                )
+            ''')
+            migration_results.append("✓ Table 'user_tokens' ready")
+
+            # ========================================
+            # TABLE 3: accounts (Trading accounts)
+            # ========================================
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS accounts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    account TEXT UNIQUE,
+                    nickname TEXT,
+                    status TEXT DEFAULT 'inactive',
+                    broker TEXT,
+                    last_seen TEXT,
+                    created TEXT,
+                    symbol_received INTEGER DEFAULT 0,
+                    user_id TEXT,
+                    FOREIGN KEY (user_id) REFERENCES users(user_id)
+                )
+            ''')
+
+            # Check if user_id column exists (for legacy databases)
+            cursor.execute("PRAGMA table_info(accounts)")
+            columns = [col[1] for col in cursor.fetchall()]
+
+            if 'user_id' not in columns:
+                cursor.execute('ALTER TABLE accounts ADD COLUMN user_id TEXT')
+                migration_results.append("✓ Added 'user_id' to 'accounts'")
+            else:
+                migration_results.append("✓ Table 'accounts' ready")
+
+            # ========================================
+            # TABLE 4: global_settings
+            # ========================================
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS global_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            ''')
+            migration_results.append("✓ Table 'global_settings' ready")
+
+            # ========================================
+            # TABLE 5: sessions (for session tracking)
+            # ========================================
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS sessions (
+                    session_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TEXT,
+                    ip_address TEXT,
+                    user_agent TEXT,
+                    FOREIGN KEY (user_id) REFERENCES users(user_id)
+                )
+            ''')
+            migration_results.append("✓ Table 'sessions' ready")
+
+            # ========================================
+            # Create indexes for performance
+            # ========================================
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts(user_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_tokens_user_id ON user_tokens(user_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)')
+            migration_results.append("✓ Database indexes created")
+
+            # ========================================
+            # Create Admin User if ADMIN_EMAIL is set
+            # ========================================
+            admin_email = self.admin_email.get().strip()
+            if admin_email:
+                cursor.execute(
+                    'SELECT user_id FROM users WHERE email = ?',
+                    (admin_email,)
+                )
+                if not cursor.fetchone():
+                    import secrets
+                    admin_id = f"admin_{secrets.token_hex(4)}"
+                    cursor.execute('''
+                        INSERT INTO users (user_id, email, name, is_active, is_admin, created_at)
+                        VALUES (?, ?, 'Admin', 1, 1, ?)
+                    ''', (admin_id, admin_email, datetime.now().isoformat()))
+                    migration_results.append(f"✓ Created admin: {admin_email}")
                 else:
-                    migration_results.append(f"⚠ Migration 001: {result.stderr[:100]}")
+                    migration_results.append(f"✓ Admin exists: {admin_email}")
 
-            # Migration 002: Migrate copy pairs JSON
-            migration_002 = self.base_dir / 'migrations' / '002_migrate_copy_pairs_json.py'
-            if migration_002.exists():
-                result = subprocess.run(
-                    [sys.executable, str(migration_002)],
-                    capture_output=True,
-                    text=True,
-                    cwd=str(self.base_dir)
-                )
-                if result.returncode == 0:
-                    migration_results.append("✓ Copy pairs migrated")
+            # ========================================
+            # Migrate JSON files (copy_pairs.json)
+            # ========================================
+            self._migrate_json_files(cursor, migration_results)
 
-            # Migration 003: Migrate webhook accounts JSON
-            migration_003 = self.base_dir / 'migrations' / '003_migrate_webhook_accounts.py'
-            if migration_003.exists():
-                result = subprocess.run(
-                    [sys.executable, str(migration_003)],
-                    capture_output=True,
-                    text=True,
-                    cwd=str(self.base_dir)
-                )
-                if result.returncode == 0:
-                    migration_results.append("✓ Webhook accounts migrated")
+            conn.commit()
+            conn.close()
 
             return True, migration_results
 
         except Exception as e:
-            return False, [f"Migration error: {str(e)}"]
+            migration_results.append(f"✗ Error: {str(e)}")
+            return False, migration_results
+
+    def _migrate_json_files(self, cursor, migration_results):
+        """Migrate JSON files to add user_id field"""
+        import json
+
+        # Migrate copy_pairs.json
+        copy_pairs_path = self.base_dir / 'data' / 'copy_pairs.json'
+        if copy_pairs_path.exists():
+            try:
+                with open(copy_pairs_path, 'r', encoding='utf-8') as f:
+                    pairs = json.load(f)
+
+                modified = False
+                if isinstance(pairs, list):
+                    for pair in pairs:
+                        if isinstance(pair, dict) and 'user_id' not in pair:
+                            pair['user_id'] = 'admin_001'
+                            modified = True
+
+                if modified:
+                    with open(copy_pairs_path, 'w', encoding='utf-8') as f:
+                        json.dump(pairs, f, indent=2, ensure_ascii=False)
+                    migration_results.append("✓ copy_pairs.json migrated")
+                else:
+                    migration_results.append("✓ copy_pairs.json already migrated")
+            except Exception as e:
+                migration_results.append(f"⚠ copy_pairs.json: {str(e)[:50]}")
+
+        # Migrate webhook_accounts.json
+        webhook_path = self.base_dir / 'data' / 'webhook_accounts.json'
+        if webhook_path.exists():
+            try:
+                with open(webhook_path, 'r', encoding='utf-8') as f:
+                    accounts = json.load(f)
+
+                modified = False
+                if isinstance(accounts, dict):
+                    for key, value in accounts.items():
+                        if isinstance(value, dict) and 'user_id' not in value:
+                            value['user_id'] = 'admin_001'
+                            modified = True
+                elif isinstance(accounts, list):
+                    for account in accounts:
+                        if isinstance(account, dict) and 'user_id' not in account:
+                            account['user_id'] = 'admin_001'
+                            modified = True
+
+                if modified:
+                    with open(webhook_path, 'w', encoding='utf-8') as f:
+                        json.dump(accounts, f, indent=2, ensure_ascii=False)
+                    migration_results.append("✓ webhook_accounts.json migrated")
+                else:
+                    migration_results.append("✓ webhook_accounts.json already migrated")
+            except Exception as e:
+                migration_results.append(f"⚠ webhook_accounts.json: {str(e)[:50]}")
 
     def browse_main_path(self):
         filename = filedialog.askopenfilename(
