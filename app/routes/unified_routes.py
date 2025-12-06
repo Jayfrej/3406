@@ -629,10 +629,13 @@ def ea_register(license_key: str):
     user_accounts = user_service.get_user_accounts_list(user_id)
 
     if account in user_accounts:
-        # Account exists - activate it (change status to Online)
+        # Account exists - activate it (change status to Online and set symbol_received=1)
         try:
-            # ✅ FIX: Use set_account_online() to change status to "Online"
-            if hasattr(session_manager, 'set_account_online'):
+            # ✅ FIX: Use activate_by_symbol() to properly set symbol_received=1
+            # This is REQUIRED for Copy Trading to work
+            if hasattr(session_manager, 'activate_by_symbol'):
+                session_manager.activate_by_symbol(account, broker, '')
+            elif hasattr(session_manager, 'set_account_online'):
                 session_manager.set_account_online(account, broker)
             else:
                 session_manager.update_account_heartbeat(account)
@@ -842,14 +845,17 @@ def broker_register(license_key: str):
         except Exception as e:
             logger.warning(f"[BROKER_REGISTER] Could not update broker data: {e}")
 
-        # ✅ FIX: Use set_account_online() to change status to "Online"
-        # update_account_heartbeat() only updates last_seen, not status
+        # ✅ FIX: Use activate_by_symbol() to properly activate account
+        # This sets symbol_received=1 which is REQUIRED for Copy Trading to work
         try:
-            if hasattr(session_manager, 'set_account_online'):
+            first_symbol = symbols[0] if symbols else ''
+            if hasattr(session_manager, 'activate_by_symbol'):
+                session_manager.activate_by_symbol(account, broker, first_symbol)
+                logger.info(f"[BROKER_REGISTER] ✅ Account {account} ACTIVATED with symbol_received=1 for {user_email}")
+            elif hasattr(session_manager, 'set_account_online'):
                 session_manager.set_account_online(account, broker)
-                logger.info(f"[BROKER_REGISTER] ✅ Account {account} ACTIVATED (status: Online) for {user_email}")
+                logger.info(f"[BROKER_REGISTER] ✅ Account {account} set online for {user_email}")
             else:
-                # Fallback to heartbeat if set_account_online not available
                 session_manager.update_account_heartbeat(account)
                 logger.info(f"[BROKER_REGISTER] ✅ Account {account} heartbeat updated for {user_email}")
         except Exception as e:
