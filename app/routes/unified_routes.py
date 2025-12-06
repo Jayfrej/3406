@@ -26,11 +26,12 @@ webhook_service = None
 system_logs_service = None
 limiter = None
 command_queue = None  # Shared command queue instance
+copy_handler = None   # Shared copy handler instance
 
 EXTERNAL_BASE_URL = os.getenv('EXTERNAL_BASE_URL', 'http://localhost:5000')
 
 
-def init_unified_routes(us, sm, ws, sls, lim, cq=None):
+def init_unified_routes(us, sm, ws, sls, lim, cq=None, ch=None):
     """
     Initialize unified routes with dependencies
 
@@ -41,15 +42,17 @@ def init_unified_routes(us, sm, ws, sls, lim, cq=None):
         sls: SystemLogsService instance
         lim: Limiter instance
         cq: CommandQueue instance (shared)
+        ch: CopyHandler instance (shared)
     """
-    global user_service, session_manager, webhook_service, system_logs_service, limiter, command_queue
+    global user_service, session_manager, webhook_service, system_logs_service, limiter, command_queue, copy_handler
     user_service = us
     session_manager = sm
     webhook_service = ws
     system_logs_service = sls
     limiter = lim
     command_queue = cq
-    logger.info(f"[UNIFIED_ROUTES] Initialized with shared command_queue: {type(cq)}")
+    copy_handler = ch
+    logger.info(f"[UNIFIED_ROUTES] Initialized with shared command_queue: {type(cq)}, copy_handler: {type(ch)}")
 
 
 def _detect_request_type(data: dict) -> str:
@@ -692,7 +695,7 @@ def ea_get_copy_pairs(license_key: str):
         copy_manager = CopyManager()
 
         # Get pairs where this account is master or slave
-        all_pairs = copy_manager.get_pairs()
+        all_pairs = copy_manager.get_all_pairs()
 
         # Filter by user_id
         user_pairs = [p for p in all_pairs if p.get('user_id') == user_id]
@@ -1237,4 +1240,99 @@ def get_account_balance(license_key: str, account: str):
             'balance': None,
             'message': 'No balance data available'
         })
+
+
+# ========================================
+# COPY TRADING API ENDPOINTS (/{license_key}/api/copy/*)
+# ========================================
+
+@unified_bp.route('/<license_key>/api/copy/trade', methods=['POST'])
+def copy_trade(license_key: str):
+    """
+    Copy Trading endpoint - Master EA sends trade signals to copy to Slave accounts
+
+    URL: https://yourdomain.com/{license_key}/api/copy/trade
+
+    Body:
+    {
+        "api_key": "copy_api_key_here",
+        "event": "OPEN",
+        "account": "12345678",
+        "ticket": 123456789,
+        "symbol": "EURUSD",
+        "type": "BUY",
+        "volume": 0.1,
+        "price": 1.12345,
+        "sl": 1.12000,
+        "tp": 1.13000
+    }
+    """
+    user, error = _validate_license_and_get_user(license_key)
+    if error:
+        return error
+
+    user_id = user['user_id']
+    user_email = user['email']
+
+    try:
+        # Parse JSON data
+        try:
+            data = request.get_json(force=True)
+        except Exception as json_err:
+            logger.error(f"[COPY_TRADE] JSON Parse Error: {json_err}")
+            return jsonify({'success': False, 'error': 'Invalid JSON'}), 400
+
+        logger.info(f"[COPY_TRADE] User {user_email}, Data: {data}")
+
+        # Log event summary
+        event = data.get('event', 'UNKNOWN')
+        symbol = data.get('symbol', '-')
+        account = data.get('account', '-')
+
+        system_logs_service.add_log(
+            'info',
+            f'📡 Copy signal received: {event} {symbol} from {account}',
+            user_id=user_id
+        )
+
+        # Validate API key
+        api_key = str(data.get('api_key', '')).strip()
+        if not api_key:
+            system_logs_service.add_log('error', '❌ Copy trade failed - API key missing', user_id=user_id)
+            return jsonify({'success': False, 'error': 'api_key is required'}), 400
+
+        # Use shared copy_handler instance
+        if copy_handler is None:
+            logger.error("[COPY_TRADE] copy_handler not initialized")
+            return jsonify({'success': False, 'error': 'Copy trading not initialized'}), 500
+
+        # Process the signal using shared copy_handler
+        result = copy_handler.process_master_signal(api_key, data)
+
+        if not result or not result.get('success'):
+            error_msg = (result or {}).get('error', 'Processing failed')
+            system_logs_service.add_log('error', f'❌ Copy trade failed: {error_msg}', user_id=user_id)
+            return jsonify({'success': False, 'error': error_msg}), 500
+
+        # Success!
+        volume = data.get('volume', '-')
+        system_logs_service.add_log(
+            'success',
+            f'✅ Copy trade executed: {account} → Slave ({event} {symbol} Vol:{volume})',
+            user_id=user_id
+        )
+
+        return jsonify({
+            'success': True,
+            'type': 'copy_trade',
+            'user_id': user_id,
+            'message': 'Copy trade executed successfully',
+            'result': result
+        })
+
+
+    except Exception as e:
+        logger.error(f"[COPY_TRADE] Error: {e}", exc_info=True)
+        system_logs_service.add_log('error', f'❌ Copy trade error: {str(e)[:80]}', user_id=user_id)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
