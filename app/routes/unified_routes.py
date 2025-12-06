@@ -25,11 +25,12 @@ session_manager = None
 webhook_service = None
 system_logs_service = None
 limiter = None
+command_queue = None  # Shared command queue instance
 
 EXTERNAL_BASE_URL = os.getenv('EXTERNAL_BASE_URL', 'http://localhost:5000')
 
 
-def init_unified_routes(us, sm, ws, sls, lim):
+def init_unified_routes(us, sm, ws, sls, lim, cq=None):
     """
     Initialize unified routes with dependencies
 
@@ -39,13 +40,16 @@ def init_unified_routes(us, sm, ws, sls, lim):
         ws: WebhookService instance
         sls: SystemLogsService instance
         lim: Limiter instance
+        cq: CommandQueue instance (shared)
     """
-    global user_service, session_manager, webhook_service, system_logs_service, limiter
+    global user_service, session_manager, webhook_service, system_logs_service, limiter, command_queue
     user_service = us
     session_manager = sm
     webhook_service = ws
     system_logs_service = sls
     limiter = lim
+    command_queue = cq
+    logger.info(f"[UNIFIED_ROUTES] Initialized with shared command_queue: {type(cq)}")
 
 
 def _detect_request_type(data: dict) -> str:
@@ -914,15 +918,17 @@ def get_commands(license_key: str, account: str):
             if command:
                 commands.append(command)
 
-        # Also check command queue if exists
-        try:
-            from app.command_queue import CommandQueue
-            cmd_queue = CommandQueue()
-            queued_commands = cmd_queue.get_commands(account, limit=limit)
-            if queued_commands:
-                commands.extend(queued_commands)
-        except Exception as e:
-            logger.debug(f"[GET_COMMANDS] Command queue not available: {e}")
+        # Also check command queue if exists (use shared instance)
+        if command_queue is not None:
+            try:
+                queued_commands = command_queue.get_pending_commands(account, limit=limit)
+                if queued_commands:
+                    commands.extend(queued_commands)
+                    logger.info(f"[GET_COMMANDS] Found {len(queued_commands)} queued commands for {account}")
+            except Exception as e:
+                logger.debug(f"[GET_COMMANDS] Error getting from command queue: {e}")
+        else:
+            logger.warning("[GET_COMMANDS] command_queue is None - not initialized properly")
 
     except Exception as e:
         logger.warning(f"[GET_COMMANDS] Error getting commands: {e}")
@@ -988,13 +994,12 @@ def ack_command(license_key: str, account: str):
         if hasattr(session_manager, 'mark_command_executed'):
             session_manager.mark_command_executed(account, command_id, status, ticket)
 
-        # Also try command queue
-        try:
-            from app.command_queue import CommandQueue
-            cmd_queue = CommandQueue()
-            cmd_queue.acknowledge_command(command_id, status, ticket, message)
-        except Exception:
-            pass
+        # Also try command queue (use shared instance)
+        if command_queue is not None:
+            try:
+                command_queue.acknowledge_command(account, command_id)
+            except Exception as e:
+                logger.debug(f"[ACK_COMMAND] Error acknowledging in queue: {e}")
 
     except Exception as e:
         logger.warning(f"[ACK_COMMAND] Error acknowledging command: {e}")

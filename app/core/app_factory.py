@@ -279,7 +279,8 @@ def create_app():
         sm=session_manager,
         ws=webhook_service,
         sls=system_logs_service,
-        lim=limiter
+        lim=limiter,
+        cq=command_queue
     )
 
     logger.info("[APP_FACTORY] Routes initialized (including unified endpoint)")
