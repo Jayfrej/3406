@@ -727,6 +727,55 @@ class UserService:
         finally:
             conn.close()
 
+    def get_webhook_secret(self, user_id: str) -> Optional[str]:
+        """
+        Get webhook secret for a user by user_id.
+
+        Args:
+            user_id: User ID
+
+        Returns:
+            str: Webhook secret or None if not set
+        """
+        status = self.get_webhook_secret_status(user_id)
+        return status.get('secret')
+
+    def set_webhook_secret(self, user_id: str, secret: str) -> bool:
+        """
+        Set webhook secret for a user.
+
+        Args:
+            user_id: User ID
+            secret: Secret key to set
+
+        Returns:
+            bool: True if successful
+        """
+        if not secret or not secret.strip():
+            return self.clear_webhook_secret(user_id)
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                UPDATE users 
+                SET webhook_secret = ?
+                WHERE user_id = ?
+            """, (secret.strip(), user_id))
+            conn.commit()
+
+            if cursor.rowcount > 0:
+                logger.info(f"[USER_SERVICE] Set webhook secret for user: {user_id}")
+                return True
+            return False
+
+        except sqlite3.Error as e:
+            logger.error(f"[USER_SERVICE] Error setting webhook secret: {e}")
+            return False
+        finally:
+            conn.close()
+
     def validate_webhook_secret(self, license_key: str, provided_secret: str) -> bool:
         """
         Validate that provided secret matches user's webhook secret.

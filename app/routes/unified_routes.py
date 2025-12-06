@@ -1174,11 +1174,11 @@ def update_account_balance(license_key: str):
                 account=account,
                 balance=float(raw_balance) if raw_balance is not None else 0,
                 equity=float(raw_equity) if raw_equity is not None else None,
-            margin=float(raw_margin) if raw_margin is not None else None,
-            free_margin=float(raw_free_margin) if raw_free_margin is not None else None,
-            currency=data.get('currency', 'USD')
-        )
-        logger.info(f"[BALANCE_UPDATE] ✅ Balance updated for {account}: {raw_balance}")
+                margin=float(raw_margin) if raw_margin is not None else None,
+                free_margin=float(raw_free_margin) if raw_free_margin is not None else None,
+                currency=data.get('currency', 'USD')
+            )
+            logger.info(f"[BALANCE_UPDATE] ✅ Balance updated for {account}: {raw_balance}")
     except Exception as e:
         logger.warning(f"[BALANCE_UPDATE] Could not update balance: {e}")
 

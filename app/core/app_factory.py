@@ -218,7 +218,8 @@ def create_app():
         aas=account_allowlist_service,
         cm=copy_manager,
         ch=copy_history,
-        dah_fn=delete_account_history
+        dah_fn=delete_account_history,
+        us=user_service
     )
 
     init_copy_trading_routes(

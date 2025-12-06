@@ -1,0 +1,156 @@
+2025-12-07 00:53:17,766 [INFO] app.core.app_factory: [APP_FACTORY] Initializing application...
+2025-12-07 00:53:17,771 [INFO] app.core.app_factory: [APP_FACTORY] Checking database schema...
+2025-12-07 00:53:17,774 [INFO] app.core.database_init: [DB_INIT] Checking database schema: C:\Users\usEr\PycharmProjects\3406\data\accounts.db
+2025-12-07 00:53:17,778 [INFO] app.core.database_init: [DB_INIT] \u2713 Database schema initialization complete
+2025-12-07 01:05:38,632 [INFO] app.core.database_init: [DB_INIT] Auto-generated 16777216 webhook tokens for users
+2025-12-07 01:05:39,090 [INFO] app.core.database_init: [DB_INIT] Auto-migration complete: 16777216 items processed
+2025-12-07 01:05:39,094 [INFO] app.core.app_factory: [APP_FACTORY] \u2713 Database healthy - 2 users, 2 accounts
+2025-12-07 01:05:39,113 [INFO] app.command_queue: [COMMAND_QUEUE] Initialized (max_queue_size=1000, max_age=300s)
+2025-12-07 01:05:39,115 [INFO] app.account_balance: [BALANCE_MANAGER] Initialized with cache expiry: 120s
+2025-12-07 01:05:39,165 [INFO] app.session_manager: [DB] Database initialized successfully
+2025-12-07 01:05:39,167 [INFO] app.core.app_factory: [APP_FACTORY] SessionManager initialized
+2025-12-07 01:05:39,168 [INFO] app.email_handler: [EMAIL] Detected SMTP settings for gmail.com: smtp.gmail.com:587
+2025-12-07 01:05:39,170 [INFO] app.email_handler: [EMAIL] Email notifications enabled
+2025-12-07 01:05:39,171 [INFO] app.email_handler: [EMAIL] From: your.email@gmail.com
+2025-12-07 01:05:39,173 [INFO] app.email_handler: [EMAIL] To: alert1@gmail.com, alert2@gmail.com
+2025-12-07 01:05:39,174 [INFO] app.email_handler: [EMAIL] SMTP: smtp.gmail.com:587
+2025-12-07 01:05:39,176 [INFO] app.core.app_factory: [APP_FACTORY] EmailHandler initialized
+2025-12-07 01:05:39,177 [INFO] app.command_queue: [COMMAND_QUEUE] Initialized (max_queue_size=1000, max_age=300s)
+2025-12-07 01:05:39,179 [INFO] app.core.app_factory: [APP_FACTORY] \u2705 CommandQueue initialized: <class 'app.command_queue.CommandQueue'>
+2025-12-07 01:05:39,180 [INFO] app.broker_data_manager: [BROKER_MANAGER] Loaded 1 broker data from file
+2025-12-07 01:05:39,182 [INFO] app.broker_data_manager: [BROKER_MANAGER] Initialized with 1 accounts
+2025-12-07 01:05:39,183 [INFO] app.account_balance: [BALANCE_MANAGER] Initialized with cache expiry: 120s
+2025-12-07 01:05:39,540 [WARNING] app.symbol_mapper: [SYMBOL_MAPPER] Failed to load base mappings: 404
+2025-12-07 01:05:39,543 [INFO] app.symbol_mapper: [SYMBOL_MAPPER] Initialized successfully
+2025-12-07 01:05:39,543 [INFO] app.symbol_mapper: [SYMBOL_MAPPER] Loaded 0 base mappings
+2025-12-07 01:05:39,544 [INFO] app.symbol_mapper: [SYMBOL_MAPPER] Loaded 0 custom mappings
+2025-12-07 01:05:39,546 [INFO] app.symbol_mapper: [SYMBOL_MAPPER] Built-in comprehensive mappings ready
+2025-12-07 01:05:39,547 [INFO] app.core.app_factory: [APP_FACTORY] Core modules initialized
+2025-12-07 01:05:39,552 [INFO] app.copy_trading.copy_manager: [COPY_MANAGER] Initialized successfully
+2025-12-07 01:05:39,554 [INFO] app.copy_trading.copy_history: [COPY_HISTORY] No history file found, starting fresh
+2025-12-07 01:05:39,555 [INFO] app.copy_trading.copy_history: [COPY_HISTORY] Initialized with 0 events in buffer
+2025-12-07 01:05:39,557 [INFO] app.copy_trading.copy_handler: [COPY_HANDLER] Initialized (v3.4 - Partial Close Support)
+2025-12-07 01:05:39,558 [INFO] app.core.app_factory: [APP_FACTORY] Copy trading modules initialized
+2025-12-07 01:05:39,563 [INFO] app.core.app_factory: [APP_FACTORY] UserService initialized (License Key support)
+2025-12-07 01:05:39,564 [INFO] app.core.app_factory: [APP_FACTORY] Creating WebhookService with command_queue: <class 'app.command_queue.CommandQueue'>
+2025-12-07 01:05:39,566 [INFO] app.core.app_factory: [WEBHOOK_SERVICE] Initialized with command_queue: <class 'app.command_queue.CommandQueue'>
+2025-12-07 01:05:39,567 [INFO] app.core.app_factory: [WEBHOOK_SERVICE] \u2705 command_queue received successfully
+2025-12-07 01:05:39,569 [INFO] app.core.app_factory: [APP_FACTORY] \u2705 WebhookService initialized with command_queue
+2025-12-07 01:05:39,570 [INFO] app.services.settings_service: [SETTINGS_SERVICE] Initialized
+2025-12-07 01:05:39,572 [INFO] app.core.app_factory: [APP_FACTORY] Services initialized
+2025-12-07 01:05:39,582 [INFO] app.routes.unified_routes: [UNIFIED_ROUTES] Initialized with shared instances: command_queue=<class 'app.command_queue.CommandQueue'>, copy_handler=<class 'app.copy_trading.copy_handler.CopyHandler'>, broker_manager=<class 'app.broker_data_manager.BrokerDataManager'>, balance_manager=<class 'app.account_balance.AccountBalanceManager'>
+2025-12-07 01:05:39,585 [INFO] app.core.app_factory: [APP_FACTORY] Routes initialized (including unified endpoint)
+2025-12-07 01:05:39,613 [INFO] app.core.app_factory: [APP_FACTORY] Blueprints registered (unified endpoint last)
+2025-12-07 01:05:39,615 [INFO] app.core.app_factory: [APP_FACTORY] Registered routes:
+2025-12-07 01:05:39,616 [INFO] app.core.app_factory:   static                                   /static/<path:filename>                            [GET]
+2025-12-07 01:05:39,618 [INFO] app.core.app_factory:   auth.google_login                        /login/google                                      [GET]
+2025-12-07 01:05:39,619 [INFO] app.core.app_factory:   auth.google_callback                     /auth/google/callback                              [GET]
+2025-12-07 01:05:39,628 [INFO] app.core.app_factory:   auth.logout                              /logout                                            [GET,POST]
+2025-12-07 01:05:39,630 [INFO] app.core.app_factory:   auth.auth_status                         /auth/status                                       [GET]
+2025-12-07 01:05:39,632 [INFO] app.core.app_factory:   auth.get_webhook_token                   /auth/webhook-token                                [GET]
+2025-12-07 01:05:39,633 [INFO] app.core.app_factory:   auth.rotate_webhook_token                /auth/rotate-token                                 [POST]
+2025-12-07 01:05:39,635 [INFO] app.core.app_factory:   webhook.get_webhook_url                  /webhook-url                                       [GET]
+2025-12-07 01:05:39,637 [INFO] app.core.app_factory:   webhook.webhook_info                     /webhook/                                          [GET]
+2025-12-07 01:05:39,640 [INFO] app.core.app_factory:   webhook.webhook_info                     /webhook                                           [GET]
+2025-12-07 01:05:39,642 [INFO] app.core.app_factory:   webhook.webhook_health                   /webhook/health                                    [GET]
+2025-12-07 01:05:39,644 [INFO] app.core.app_factory:   webhook.webhook_handler                  /webhook/<token>                                   [POST]
+2025-12-07 01:05:39,646 [INFO] app.core.app_factory:   account.get_accounts                     /accounts                                          [GET]
+2025-12-07 01:05:39,647 [INFO] app.core.app_factory:   account.add_account                      /accounts                                          [POST]
+2025-12-07 01:05:39,649 [INFO] app.core.app_factory:   account.restart_account                  /accounts/<account>/restart                        [POST]
+2025-12-07 01:05:39,651 [INFO] app.core.app_factory:   account.stop_account                     /accounts/<account>/stop                           [POST]
+2025-12-07 01:05:39,652 [INFO] app.core.app_factory:   account.open_account                     /accounts/<account>/open                           [POST]
+2025-12-07 01:05:39,654 [INFO] app.core.app_factory:   account.pause_account                    /accounts/<account>/pause                          [POST]
+2025-12-07 01:05:39,656 [INFO] app.core.app_factory:   account.resume_account                   /accounts/<account>/resume                         [POST]
+2025-12-07 01:05:39,657 [INFO] app.core.app_factory:   account.delete_account                   /accounts/<account>                                [DELETE]
+2025-12-07 01:05:39,659 [INFO] app.core.app_factory:   account.get_global_secret                /settings/secret                                   [GET]
+2025-12-07 01:05:39,661 [INFO] app.core.app_factory:   account.update_global_secret             /settings/secret                                   [POST]
+2025-12-07 01:05:39,662 [INFO] app.core.app_factory:   account.get_account_secret               /accounts/<account>/secret                         [GET]
+2025-12-07 01:05:39,664 [INFO] app.core.app_factory:   account.update_account_secret            /accounts/<account>/secret                         [POST]
+2025-12-07 01:05:39,665 [INFO] app.core.app_factory:   account.get_symbol_mappings              /accounts/<account>/symbols                        [GET]
+2025-12-07 01:05:39,667 [INFO] app.core.app_factory:   account.update_symbol_mappings           /accounts/<account>/symbols                        [POST]
+2025-12-07 01:05:39,668 [INFO] app.core.app_factory:   account.delete_symbol_mapping            /accounts/<account>/symbols/<from_symbol>          [DELETE]
+2025-12-07 01:05:39,670 [INFO] app.core.app_factory:   account.get_all_symbol_mappings          /accounts/symbols/overview                         [GET]
+2025-12-07 01:05:39,672 [INFO] app.core.app_factory:   account.list_webhook_accounts            /webhook-accounts                                  [GET]
+2025-12-07 01:05:39,675 [INFO] app.core.app_factory:   account.add_webhook_account              /webhook-accounts                                  [POST]
+2025-12-07 01:05:39,676 [INFO] app.core.app_factory:   account.delete_webhook_account           /webhook-accounts/<account>                        [DELETE]
+2025-12-07 01:05:39,679 [INFO] app.core.app_factory:   account.get_symbol_mappings_api          /api/symbol-mappings/<account>                     [GET]
+2025-12-07 01:05:39,682 [INFO] app.core.app_factory:   account.add_symbol_mapping_api           /api/symbol-mappings/<account>                     [POST]
+2025-12-07 01:05:39,683 [INFO] app.core.app_factory:   account.delete_symbol_mapping_api        /api/symbol-mappings/<account>/<from_symbol>       [DELETE]
+2025-12-07 01:05:39,684 [INFO] app.core.app_factory:   copy_trading.list_pairs                  /api/pairs                                         [GET]
+2025-12-07 01:05:39,686 [INFO] app.core.app_factory:   copy_trading.create_copy_pair            /api/pairs                                         [POST]
+2025-12-07 01:05:39,687 [INFO] app.core.app_factory:   copy_trading.update_copy_pair            /api/pairs/<pair_id>                               [PUT]
+2025-12-07 01:05:39,689 [INFO] app.core.app_factory:   copy_trading.delete_pair                 /api/pairs/<pair_id>                               [DELETE]
+2025-12-07 01:05:39,690 [INFO] app.core.app_factory:   copy_trading.toggle_copy_pair            /api/pairs/<pair_id>/toggle                        [POST]
+2025-12-07 01:05:39,692 [INFO] app.core.app_factory:   copy_trading.add_master_to_pair          /api/pairs/<pair_id>/add-master                    [POST]
+2025-12-07 01:05:39,693 [INFO] app.core.app_factory:   copy_trading.add_slave_to_pair           /api/pairs/<pair_id>/add-slave                     [POST]
+2025-12-07 01:05:39,695 [INFO] app.core.app_factory:   copy_trading.get_master_accounts         /api/copy/master-accounts                          [GET]
+2025-12-07 01:05:39,697 [INFO] app.core.app_factory:   copy_trading.add_master_account          /api/copy/master-accounts                          [POST]
+2025-12-07 01:05:39,698 [INFO] app.core.app_factory:   copy_trading.delete_master_account       /api/copy/master-accounts/<account_id>             [DELETE]
+2025-12-07 01:05:39,699 [INFO] app.core.app_factory:   copy_trading.get_slave_accounts          /api/copy/slave-accounts                           [GET]
+2025-12-07 01:05:39,701 [INFO] app.core.app_factory:   copy_trading.add_slave_account           /api/copy/slave-accounts                           [POST]
+2025-12-07 01:05:39,703 [INFO] app.core.app_factory:   copy_trading.delete_slave_account        /api/copy/slave-accounts/<account_id>              [DELETE]
+2025-12-07 01:05:39,704 [INFO] app.core.app_factory:   copy_trading.copy_trade_endpoint         /api/copy/trade                                    [POST]
+2025-12-07 01:05:39,705 [INFO] app.core.app_factory:   copy_trading.get_copy_history            /api/copy/history                                  [GET]
+2025-12-07 01:05:39,706 [INFO] app.core.app_factory:   copy_trading.clear_copy_history          /api/copy/history/clear                            [POST]
+2025-12-07 01:05:39,708 [INFO] app.core.app_factory:   copy_trading.clear_copy_history_legacy   /copy-history/clear                                [POST]
+2025-12-07 01:05:39,710 [INFO] app.core.app_factory:   copy_trading.sse_copy_trades             /events/copy-trades                                [GET]
+2025-12-07 01:05:39,711 [INFO] app.core.app_factory:   settings.get_all_settings                /api/settings                                      [GET]
+2025-12-07 01:05:39,712 [INFO] app.core.app_factory:   settings.save_rate_limit_settings        /api/settings/rate-limits                          [POST]
+2025-12-07 01:05:39,714 [INFO] app.core.app_factory:   settings.get_email_settings              /api/settings/email                                [GET]
+2025-12-07 01:05:39,715 [INFO] app.core.app_factory:   settings.save_email_settings             /api/settings/email                                [POST]
+2025-12-07 01:05:39,717 [INFO] app.core.app_factory:   settings.test_email_settings             /api/settings/email/test                           [POST]
+2025-12-07 01:05:39,719 [INFO] app.core.app_factory:   system.get_system_logs                   /api/system/logs                                   [GET]
+2025-12-07 01:05:39,722 [INFO] app.core.app_factory:   system.clear_system_logs                 /api/system/logs/clear                             [POST]
+2025-12-07 01:05:39,725 [INFO] app.core.app_factory:   system.sse_system_logs                   /events/system-logs                                [GET]
+2025-12-07 01:05:39,725 [INFO] app.core.app_factory:   system.health_check                      /health                                            [GET]
+2025-12-07 01:05:39,728 [INFO] app.core.app_factory:   system.accounts_stats                    /accounts/stats                                    [GET]
+2025-12-07 01:05:39,730 [INFO] app.core.app_factory:   system.login_api                         /login                                             [POST]
+2025-12-07 01:05:39,731 [INFO] app.core.app_factory:   broker_balance.register_broker_data      /api/broker/register                               [POST]
+2025-12-07 01:05:39,733 [INFO] app.core.app_factory:   broker_balance.get_broker_data           /api/broker/<account>                              [GET]
+2025-12-07 01:05:39,734 [INFO] app.core.app_factory:   broker_balance.get_broker_stats          /api/broker/stats                                  [GET]
+2025-12-07 01:05:39,735 [INFO] app.core.app_factory:   broker_balance.update_account_balance    /api/account/balance                               [POST]
+2025-12-07 01:05:39,737 [INFO] app.core.app_factory:   broker_balance.get_account_balance       /api/account/<account>/balance                     [GET]
+2025-12-07 01:05:39,738 [INFO] app.core.app_factory:   broker_balance.get_all_account_balances  /api/account/balance/all                           [GET]
+2025-12-07 01:05:39,740 [INFO] app.core.app_factory:   broker_balance.get_balance_manager_status /api/account/balance/status                        [GET]
+2025-12-07 01:05:39,741 [INFO] app.core.app_factory:   command.get_commands_for_ea              /api/commands/<account>                            [GET]
+2025-12-07 01:05:39,742 [INFO] app.core.app_factory:   command.acknowledge_command              /api/commands/<account>/ack                        [POST]
+2025-12-07 01:05:39,744 [INFO] app.core.app_factory:   command.get_command_queue_status         /api/commands/<account>/status                     [GET]
+2025-12-07 01:05:39,746 [INFO] app.core.app_factory:   command.clear_command_queue              /api/commands/<account>/clear                      [POST]
+2025-12-07 01:05:39,747 [INFO] app.core.app_factory:   command.get_all_queues_status            /api/commands/status/all                           [GET]
+2025-12-07 01:05:39,749 [INFO] app.core.app_factory:   command.debug_commands                   /debug/commands/<account>                          [GET]
+2025-12-07 01:05:39,750 [INFO] app.core.app_factory:   ea_api.ea_heartbeat                      /api/ea/heartbeat                                  [POST]
+2025-12-07 01:05:39,752 [INFO] app.core.app_factory:   ea_api.check_balance_update_needed       /api/balance/need-update/<account>                 [GET]
+2025-12-07 01:05:39,753 [INFO] app.core.app_factory:   trades.get_trades                        /trades                                            [GET]
+2025-12-07 01:05:39,755 [INFO] app.core.app_factory:   trades.clear_trades                      /trades/clear                                      [POST]
+2025-12-07 01:05:39,757 [INFO] app.core.app_factory:   trades.sse_trades                        /events/trades                                     [GET]
+2025-12-07 01:05:39,758 [INFO] app.core.app_factory:   user.get_user_profile                    /api/user/profile                                  [GET]
+2025-12-07 01:05:39,759 [INFO] app.core.app_factory:   user.get_user_credentials                /api/user/credentials                              [GET]
+2025-12-07 01:05:39,761 [INFO] app.core.app_factory:   user.get_license_key                     /api/user/license-key                              [GET]
+2025-12-07 01:05:39,762 [INFO] app.core.app_factory:   user.regenerate_license_key              /api/user/license-key/regenerate                   [POST]
+2025-12-07 01:05:39,764 [INFO] app.core.app_factory:   user.regenerate_webhook_secret           /api/user/webhook-secret/regenerate                [POST]
+2025-12-07 01:05:39,765 [INFO] app.core.app_factory:   user.clear_webhook_secret                /api/user/webhook-secret/clear                     [POST]
+2025-12-07 01:05:39,767 [INFO] app.core.app_factory:   user.get_webhook_secret_status           /api/user/webhook-secret/status                    [GET]
+2025-12-07 01:05:39,768 [INFO] app.core.app_factory:   user.get_user_accounts                   /api/user/accounts                                 [GET]
+2025-12-07 01:05:39,770 [INFO] app.core.app_factory:   ui.index                                 /                                                  [GET]
+2025-12-07 01:05:39,771 [INFO] app.core.app_factory:   ui.login_page                            /login                                             [GET]
+2025-12-07 01:05:39,772 [INFO] app.core.app_factory:   ui.admin_page                            /admin                                             [GET]
+2025-12-07 01:05:39,774 [INFO] app.core.app_factory:   ui.favicon                               /favicon.ico                                       [GET]
+2025-12-07 01:05:39,775 [INFO] app.core.app_factory:   unified.unified_webhook_handler          /<license_key>                                     [POST]
+2025-12-07 01:05:39,777 [INFO] app.core.app_factory:   unified.unified_info                     /<license_key>                                     [GET]
+2025-12-07 01:05:39,778 [INFO] app.core.app_factory:   unified.ea_heartbeat                     /<license_key>/api/ea/heartbeat                    [POST]
+2025-12-07 01:05:39,780 [INFO] app.core.app_factory:   unified.ea_get_signals                   /<license_key>/api/ea/get_signals                  [GET,POST]
+2025-12-07 01:05:39,781 [INFO] app.core.app_factory:   unified.ea_confirm_execution             /<license_key>/api/ea/confirm_execution            [POST]
+2025-12-07 01:05:39,782 [INFO] app.core.app_factory:   unified.ea_register                      /<license_key>/api/ea/register                     [POST]
+2025-12-07 01:05:39,784 [INFO] app.core.app_factory:   unified.ea_get_copy_pairs                /<license_key>/api/ea/get_copy_pairs               [GET]
+2025-12-07 01:05:39,785 [INFO] app.core.app_factory:   unified.ea_status                        /<license_key>/api/ea/status                       [GET]
+2025-12-07 01:05:39,787 [INFO] app.core.app_factory:   unified.broker_register                  /<license_key>/api/broker/register                 [POST]
+2025-12-07 01:05:39,788 [INFO] app.core.app_factory:   unified.get_commands                     /<license_key>/api/commands/<account>              [GET]
+2025-12-07 01:05:39,790 [INFO] app.core.app_factory:   unified.ack_command                      /<license_key>/api/commands/<account>/ack          [POST]
+2025-12-07 01:05:39,791 [INFO] app.core.app_factory:   unified.check_balance_need_update        /<license_key>/api/balance/need-update/<account>   [GET]
+2025-12-07 01:05:39,793 [INFO] app.core.app_factory:   unified.update_account_balance           /<license_key>/api/account/balance                 [POST]
+2025-12-07 01:05:39,794 [INFO] app.core.app_factory:   unified.get_account_balance              /<license_key>/api/account/<account>/balance       [GET]
+2025-12-07 01:05:39,796 [INFO] app.core.app_factory:   unified.copy_trade                       /<license_key>/api/copy/trade                      [POST]
+2025-12-07 01:05:39,797 [INFO] app.core.app_factory: [TRADES] Buffer warmed with 1 events
+2025-12-07 01:05:39,799 [INFO] app.core.app_factory: [APP_FACTORY] Error handlers registered
+2025-12-07 01:05:39,801 [INFO] app.core.app_factory: [APP_FACTORY] Monitoring thread started
+2025-12-07 01:05:39,803 [INFO] app.core.app_factory: [APP_FACTORY] Application initialization complete

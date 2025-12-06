@@ -20,9 +20,10 @@ account_allowlist_service = None
 copy_manager = None
 copy_history = None
 delete_account_history_fn = None
+user_service = None  # For per-user webhook secret management
 
 
-def init_account_routes(sm, sls, aas, cm, ch, dah_fn):
+def init_account_routes(sm, sls, aas, cm, ch, dah_fn, us=None):
     """
     Initialize account routes with dependencies
 
@@ -33,9 +34,10 @@ def init_account_routes(sm, sls, aas, cm, ch, dah_fn):
         cm: CopyManager instance
         ch: CopyHistory instance
         dah_fn: delete_account_history function
+        us: UserService instance (for per-user webhook secret)
     """
     global session_manager, system_logs_service, account_allowlist_service
-    global copy_manager, copy_history, delete_account_history_fn
+    global copy_manager, copy_history, delete_account_history_fn, user_service
 
     session_manager = sm
     system_logs_service = sls
@@ -43,6 +45,7 @@ def init_account_routes(sm, sls, aas, cm, ch, dah_fn):
     copy_manager = cm
     copy_history = ch
     delete_account_history_fn = dah_fn
+    user_service = us
 
 
 # =================== Account Management Routes ===================
@@ -345,26 +348,80 @@ def delete_account(account):
 @account_bp.route('/settings/secret', methods=['GET'])
 @require_auth
 def get_global_secret():
-    """Get Global Secret Key"""
+    """
+    Get User's Webhook Secret Key (Per-User, Global for all accounts of this user)
+
+    In Multi-User SaaS:
+    - Each user has their own secret
+    - All accounts of a user share the same secret
+    """
     try:
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
+        user_id = get_current_user_id()
+
+        # Try per-user secret first (Multi-User SaaS)
+        if user_id and user_service:
+            secret = user_service.get_webhook_secret(user_id)
+            return jsonify({
+                'secret': secret or '',
+                'enabled': bool(secret)
+            })
+
+        # Fallback to legacy global secret
         secret = session_manager.get_global_secret()
         return jsonify({
             'secret': secret or '',
             'enabled': bool(secret)
         })
     except Exception as e:
-        logger.error(f"[GET_GLOBAL_SECRET_ERROR] {e}")
+        logger.error(f"[GET_SECRET_ERROR] {e}")
         return jsonify({'error': str(e)}), 500
 
 
 @account_bp.route('/settings/secret', methods=['POST'])
 @require_auth
 def update_global_secret():
-    """Update Global Secret Key"""
+    """
+    Update User's Webhook Secret Key (Per-User, Global for all accounts of this user)
+
+    In Multi-User SaaS:
+    - Each user has their own secret
+    - All accounts of a user share the same secret
+    - Different users have different secrets
+    """
     try:
+        from flask import session
+        from app.middleware.auth import get_current_user_id
+
         data = request.get_json() or {}
         secret = data.get('secret', '').strip()
+        user_id = get_current_user_id()
 
+        # Update per-user secret (Multi-User SaaS)
+        if user_id and user_service:
+            try:
+                if secret:
+                    success = user_service.set_webhook_secret(user_id, secret)
+                else:
+                    success = user_service.clear_webhook_secret(user_id)
+
+                if success:
+                    action = 'updated' if secret else 'removed'
+                    system_logs_service.add_log('success', f'🔐 Webhook secret {action}', user_id=user_id)
+                    logger.info(f"[USER_SECRET] {action.capitalize()} for user {user_id}")
+                    return jsonify({
+                        'success': True,
+                        'message': f'Secret key {action} successfully'
+                    })
+                else:
+                    return jsonify({'error': 'Failed to update secret key'}), 500
+            except Exception as e:
+                logger.error(f"[USER_SECRET_ERROR] {e}")
+                return jsonify({'error': str(e)}), 500
+
+        # Fallback to legacy global secret
         if session_manager.update_global_secret(secret):
             action = 'updated' if secret else 'removed'
             system_logs_service.add_log('success', f'🔐 Global secret key {action}')
@@ -377,7 +434,7 @@ def update_global_secret():
             return jsonify({'error': 'Failed to update secret key'}), 500
 
     except Exception as e:
-        logger.error(f"[UPDATE_GLOBAL_SECRET_ERROR] {e}")
+        logger.error(f"[UPDATE_SECRET_ERROR] {e}")
         return jsonify({'error': str(e)}), 500
 
 
