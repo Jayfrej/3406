@@ -351,7 +351,7 @@ def ensure_database_schema() -> bool:
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 last_login TEXT,
                 license_key TEXT UNIQUE,
-                webhook_secret TEXT UNIQUE
+                webhook_secret TEXT
             )
         ''')
 
@@ -376,6 +376,7 @@ def ensure_database_schema() -> bool:
             except sqlite3.OperationalError as e:
                 if 'duplicate column' not in str(e).lower():
                     logger.warning(f"[DB_INIT] Could not add webhook_secret column: {e}")
+
 
         logger.debug("[DB_INIT] ✓ Table 'users' ready")
 

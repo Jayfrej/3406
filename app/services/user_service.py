@@ -74,32 +74,17 @@ class UserService:
                     if 'duplicate column name' not in str(e).lower():
                         logger.warning(f"[USER_SERVICE] Could not add webhook_secret column: {e}")
 
-            # Generate license keys and secrets for existing users
-            cursor.execute("SELECT user_id FROM users WHERE license_key IS NULL OR webhook_secret IS NULL")
+            # Generate license keys for existing users (webhook_secret is optional - NOT auto-generated)
+            # Users can choose to have no secret (clear_webhook_secret), so we don't force-generate it
+            cursor.execute("SELECT user_id FROM users WHERE license_key IS NULL")
             users = cursor.fetchall()
             for (user_id,) in users:
-                # Check what's missing for this user
-                cursor.execute("SELECT license_key, webhook_secret FROM users WHERE user_id = ?", (user_id,))
-                row = cursor.fetchone()
-
-                updates = []
-                params = []
-
-                if not row[0]:  # license_key is NULL
-                    updates.append("license_key = ?")
-                    params.append(self.generate_license_key())
-
-                if not row[1]:  # webhook_secret is NULL
-                    updates.append("webhook_secret = ?")
-                    params.append(self.generate_webhook_secret())
-
-                if updates:
-                    params.append(user_id)
-                    cursor.execute(f"UPDATE users SET {', '.join(updates)} WHERE user_id = ?", params)
+                new_license_key = self.generate_license_key()
+                cursor.execute("UPDATE users SET license_key = ? WHERE user_id = ?", (new_license_key, user_id))
 
             conn.commit()
             if users:
-                logger.info(f"[USER_SERVICE] Generated license keys/secrets for {len(users)} existing users")
+                logger.info(f"[USER_SERVICE] Generated license keys for {len(users)} existing users")
 
             conn.close()
         except Exception as e:
@@ -200,19 +185,19 @@ class UserService:
                 admin_email = os.getenv('ADMIN_EMAIL', '').lower()
                 is_admin = 1 if email == admin_email else 0
                 
-                # Generate unique license key and webhook secret
+                # Generate unique license key only (webhook_secret is NOT auto-generated)
+                # User must explicitly generate/set their own secret via API
                 license_key = self.generate_license_key()
-                webhook_secret = self.generate_webhook_secret()
 
                 cursor.execute("""
                     INSERT INTO users (user_id, email, name, picture, created_at, last_login, is_active, is_admin, license_key, webhook_secret)
-                    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-                """, (user_id, email, name, picture, now, now, is_admin, license_key, webhook_secret))
+                    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, NULL)
+                """, (user_id, email, name, picture, now, now, is_admin, license_key))
                 conn.commit()
                 
                 logger.info(f"[USER_SERVICE] Created new user: {email} (admin: {is_admin})")
                 logger.info(f"[USER_SERVICE] 🔑 License Key for {email}: {license_key}")
-                logger.info(f"[USER_SERVICE] 🔐 Webhook Secret for {email}: {webhook_secret[:10]}...")
+                logger.info(f"[USER_SERVICE] 🔓 No webhook secret - user can generate via API if needed")
 
                 return {
                     'user_id': user_id,
@@ -223,7 +208,7 @@ class UserService:
                     'is_admin': bool(is_admin),
                     'is_new': True,
                     'license_key': license_key,
-                    'webhook_secret': webhook_secret
+                    'webhook_secret': None  # User must generate themselves
                 }
                 
         except sqlite3.Error as e:
@@ -674,12 +659,13 @@ class UserService:
     def get_webhook_secret_by_license_key(self, license_key: str) -> Optional[str]:
         """
         Get webhook secret directly from license key (single query).
+        Returns secret if it exists and is non-empty.
 
         Args:
             license_key: User's license key
 
         Returns:
-            str: Webhook secret or None
+            str: Webhook secret or None (if not set or empty)
         """
         if not license_key or len(license_key) < 10:
             return None
@@ -693,7 +679,51 @@ class UserService:
                 (license_key,)
             )
             row = cursor.fetchone()
-            return row[0] if row else None
+            if row and row[0] and len(str(row[0]).strip()) > 0:
+                return row[0]
+            return None
+        finally:
+            conn.close()
+
+    def has_webhook_secret(self, license_key: str) -> bool:
+        """
+        Check if user has a webhook secret configured (non-empty).
+
+        Args:
+            license_key: User's license key
+
+        Returns:
+            bool: True if secret exists and is non-empty
+        """
+        return self.get_webhook_secret_by_license_key(license_key) is not None
+
+    def get_webhook_secret_status(self, user_id: str) -> dict:
+        """
+        Get webhook secret status for a user.
+
+        Args:
+            user_id: User ID
+
+        Returns:
+            dict: {has_secret: bool, secret: str|None}
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute(
+                "SELECT webhook_secret FROM users WHERE user_id = ?",
+                (user_id,)
+            )
+            row = cursor.fetchone()
+            if row:
+                secret = row[0]
+                has_secret = bool(secret and len(str(secret).strip()) > 0)
+                return {
+                    'has_secret': has_secret,
+                    'secret': secret if has_secret else None
+                }
+            return {'has_secret': False, 'secret': None}
         finally:
             conn.close()
 
@@ -718,6 +748,7 @@ class UserService:
 
         # Use constant-time comparison to prevent timing attacks
         return secrets.compare_digest(expected_secret, provided_secret)
+
 
     def regenerate_webhook_secret(self, user_id: str) -> Optional[str]:
         """
@@ -755,6 +786,39 @@ class UserService:
         finally:
             conn.close()
 
+    def clear_webhook_secret(self, user_id: str) -> bool:
+        """
+        Clear/remove webhook secret for user.
+        After clearing, webhook requests will be accepted without secret.
+
+        Args:
+            user_id: User ID
+
+        Returns:
+            bool: True if successful
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                UPDATE users 
+                SET webhook_secret = NULL
+                WHERE user_id = ?
+            """, (user_id,))
+            conn.commit()
+
+            if cursor.rowcount > 0:
+                logger.info(f"[USER_SERVICE] Cleared webhook secret for user: {user_id}")
+                return True
+            return False
+
+        except sqlite3.Error as e:
+            logger.error(f"[USER_SERVICE] Error clearing webhook secret: {e}")
+            return False
+        finally:
+            conn.close()
+
     def get_user_credentials(self, user_id: str) -> Optional[dict]:
         """
         Get user's license key and webhook secret together.
@@ -763,7 +827,7 @@ class UserService:
             user_id: User ID
 
         Returns:
-            dict: {license_key, webhook_secret, webhook_url} or None
+            dict: {license_key, webhook_secret, has_secret, webhook_url} or None
         """
         conn = self._get_connection()
         cursor = conn.cursor()
@@ -774,11 +838,13 @@ class UserService:
                 (user_id,)
             )
             row = cursor.fetchone()
-            if row and row[0] and row[1]:
+            if row and row[0]:
                 base_url = os.getenv('EXTERNAL_BASE_URL', 'http://localhost:5000')
+                secret = row[1] if row[1] and len(str(row[1]).strip()) > 0 else None
                 return {
                     'license_key': row[0],
-                    'webhook_secret': row[1],
+                    'webhook_secret': secret,
+                    'has_secret': secret is not None,
                     'webhook_url': f"{base_url}/{row[0]}"
                 }
             return None

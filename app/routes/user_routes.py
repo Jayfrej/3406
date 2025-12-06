@@ -93,10 +93,11 @@ def get_user_credentials():
 
     This returns both pieces needed for secure webhook configuration:
     - license_key: Goes in the URL
-    - webhook_secret: Goes in the request body
+    - webhook_secret: Goes in the request body (if set)
+    - has_secret: Whether user has configured a secret
 
     Returns:
-        JSON with license_key, webhook_secret, and webhook_url
+        JSON with license_key, webhook_secret, has_secret, and webhook_url
     """
     try:
         user_id = get_current_user_id()
@@ -109,18 +110,35 @@ def get_user_credentials():
         if not credentials:
             return jsonify({'error': 'Failed to get credentials'}), 500
 
-        return jsonify({
+        has_secret = credentials.get('has_secret', False)
+        webhook_secret = credentials.get('webhook_secret')
+
+        # Build response
+        response = {
             'success': True,
             'license_key': credentials['license_key'],
-            'webhook_secret': credentials['webhook_secret'],
+            'webhook_secret': webhook_secret,
+            'has_secret': has_secret,
             'webhook_url': credentials['webhook_url'],
-            'instructions': {
+        }
+
+        # Instructions based on whether secret is configured
+        if has_secret and webhook_secret:
+            response['instructions'] = {
                 'tradingview': f'Webhook URL: {credentials["webhook_url"]}',
-                'alert_body': f'{{"secret": "{credentials["webhook_secret"]}", "action": "{{{{strategy.order.action}}}}", "symbol": "{{{{ticker}}}}"}}',
+                'alert_body': f'{{"secret": "{webhook_secret}", "action": "{{{{strategy.order.action}}}}", "symbol": "{{{{ticker}}}}"}}',
                 'mt5_ea': f'API_ServerURL = {credentials["webhook_url"]}',
-                'security_note': 'Keep your webhook_secret private. Never share it publicly.'
+                'security_note': '🔒 Secret is SET. Include "secret" in every request.'
             }
-        })
+        else:
+            response['instructions'] = {
+                'tradingview': f'Webhook URL: {credentials["webhook_url"]}',
+                'alert_body': f'{{"action": "{{{{strategy.order.action}}}}", "symbol": "{{{{ticker}}}}"}}',
+                'mt5_ea': f'API_ServerURL = {credentials["webhook_url"]}',
+                'security_note': '🔓 No secret configured. Requests accepted without secret.'
+            }
+
+        return jsonify(response)
 
     except Exception as e:
         logger.error(f"[USER_CREDENTIALS] Error: {e}")
@@ -137,7 +155,7 @@ def get_license_key():
     TradingView webhooks and MT5 EA.
 
     Returns:
-        JSON with license_key and full webhook_url
+        JSON with license_key, has_secret, and full webhook_url
     """
     try:
         user_id = get_current_user_id()
@@ -156,21 +174,38 @@ def get_license_key():
             credentials = {
                 'license_key': license_key,
                 'webhook_secret': webhook_secret,
+                'has_secret': webhook_secret is not None,
                 'webhook_url': f"{EXTERNAL_BASE_URL}/{license_key}"
             }
 
-        return jsonify({
+        has_secret = credentials.get('has_secret', False)
+        webhook_secret = credentials.get('webhook_secret')
+
+        response = {
             'success': True,
             'license_key': credentials['license_key'],
-            'webhook_secret': credentials['webhook_secret'],
+            'webhook_secret': webhook_secret,
+            'has_secret': has_secret,
             'webhook_url': credentials['webhook_url'],
-            'instructions': {
+        }
+
+        # Instructions based on whether secret is configured
+        if has_secret and webhook_secret:
+            response['instructions'] = {
                 'tradingview': f'Use this URL in TradingView Alert webhook: {credentials["webhook_url"]}',
-                'alert_body': f'{{"secret": "{credentials["webhook_secret"]}", "action": "{{{{strategy.order.action}}}}", "symbol": "{{{{ticker}}}}"}}',
+                'alert_body': f'{{"secret": "{webhook_secret}", "action": "{{{{strategy.order.action}}}}", "symbol": "{{{{ticker}}}}"}}',
                 'mt5_ea': f'Set API_ServerURL in EA to: {credentials["webhook_url"]}',
-                'note': 'Include your webhook_secret in every request for security'
+                'note': '🔒 Secret is SET. Include "secret" in every request.'
             }
-        })
+        else:
+            response['instructions'] = {
+                'tradingview': f'Use this URL in TradingView Alert webhook: {credentials["webhook_url"]}',
+                'alert_body': f'{{"action": "{{{{strategy.order.action}}}}", "symbol": "{{{{ticker}}}}"}}',
+                'mt5_ea': f'Set API_ServerURL in EA to: {credentials["webhook_url"]}',
+                'note': '🔓 No secret configured. Requests accepted without secret.'
+            }
+
+        return jsonify(response)
 
     except Exception as e:
         logger.error(f"[LICENSE_KEY] Error: {e}")
@@ -269,12 +304,90 @@ def regenerate_webhook_secret():
         return jsonify({
             'success': True,
             'webhook_secret': new_secret,
-            'message': 'Webhook secret regenerated successfully. Please update your TradingView alert message.',
-            'warning': 'Your old webhook secret is now invalid!'
+            'has_secret': True,
+            'message': 'Webhook secret regenerated successfully. Now you must include "secret" in your webhook requests.',
+            'note': '🔒 Secret is now SET. Include "secret" in every request.'
         })
 
     except Exception as e:
         logger.error(f"[REGENERATE_SECRET] Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@user_bp.route('/api/user/webhook-secret/clear', methods=['POST'])
+@require_auth
+def clear_webhook_secret():
+    """
+    Clear/remove webhook secret (disable secret requirement).
+
+    After clearing, webhook requests will be accepted without secret.
+
+    Returns:
+        JSON with updated status
+    """
+    try:
+        user_id = get_current_user_id()
+
+        if not user_id:
+            return jsonify({'error': 'Not authenticated'}), 401
+
+        # Get user email for logging
+        user = user_service.get_user_by_id(user_id)
+        user_email = user.get('email', 'unknown') if user else 'unknown'
+
+        # Clear the secret by setting to empty string
+        success = user_service.clear_webhook_secret(user_id)
+
+        if not success:
+            return jsonify({'error': 'Failed to clear webhook secret'}), 500
+
+        # Log the change
+        system_logs_service.add_log(
+            'info',
+            f'🔓 Webhook secret cleared for {user_email}',
+            user_id=user_id
+        )
+
+        logger.info(f"[WEBHOOK_SECRET] Cleared for user: {user_id}")
+
+        return jsonify({
+            'success': True,
+            'has_secret': False,
+            'message': 'Webhook secret cleared. Now requests are accepted without secret.',
+            'note': '🔓 No secret required. Requests accepted without secret.'
+        })
+
+    except Exception as e:
+        logger.error(f"[CLEAR_SECRET] Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@user_bp.route('/api/user/webhook-secret/status', methods=['GET'])
+@require_auth
+def get_webhook_secret_status():
+    """
+    Get current webhook secret status (has secret or not).
+
+    Returns:
+        JSON with secret status information
+    """
+    try:
+        user_id = get_current_user_id()
+
+        if not user_id:
+            return jsonify({'error': 'Not authenticated'}), 401
+
+        status = user_service.get_webhook_secret_status(user_id)
+
+        return jsonify({
+            'success': True,
+            'has_secret': status.get('has_secret', False),
+            'webhook_secret': status.get('secret'),
+            'note': '🔒 Secret is SET. Include it in requests.' if status.get('has_secret') else '🔓 No secret. Requests accepted without secret.'
+        })
+
+    except Exception as e:
+        logger.error(f"[SECRET_STATUS] Error: {e}")
         return jsonify({'error': str(e)}), 500
 
 

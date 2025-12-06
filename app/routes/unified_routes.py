@@ -138,13 +138,20 @@ def unified_webhook_handler(license_key):
 
         # 4. 🔐 SECURITY: Validate Per-User Webhook Secret (if configured)
         # Secret can be in body (preferred) or header
+        #
+        # Logic (SIMPLE):
+        # - If user HAS secret configured → Secret MUST be provided and valid
+        # - If user has NO secret → No secret required, allow request
+        # - Secret is per-User (all accounts of same user share same secret)
+
         provided_secret = data.get('secret') or request.headers.get('X-Webhook-Secret')
 
-        # Check if user has webhook_secret configured
-        user_has_secret = user_service.get_webhook_secret_by_license_key(license_key) is not None
+        # Check if user has secret configured (non-empty)
+        stored_secret = user_service.get_webhook_secret_by_license_key(license_key)
+        user_has_secret = stored_secret is not None and len(str(stored_secret).strip()) > 0
 
         if user_has_secret:
-            # User has secret configured - require validation
+            # User HAS secret configured - MUST validate
             if not provided_secret:
                 logger.warning(f"[UNIFIED] ❌ No secret provided for {user_email}")
                 system_logs_service.add_log('error', f'🔐 [401] Missing secret for {user_email}', user_id=user_id)
@@ -160,8 +167,8 @@ def unified_webhook_handler(license_key):
 
             logger.info(f"[UNIFIED] ✅ User authenticated with valid secret: {user_email}")
         else:
-            # User has NOT configured secret - allow without secret (but log warning)
-            logger.info(f"[UNIFIED] ⚠️ No secret configured for {user_email} - allowing request")
+            # User has NO secret configured - allow without secret
+            logger.info(f"[UNIFIED] ✅ No secret configured for {user_email} - allowing request")
 
         # Update last login
         user_service.update_last_login(user_id)
