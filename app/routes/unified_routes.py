@@ -136,24 +136,32 @@ def unified_webhook_handler(license_key):
         if not data:
             return jsonify({'error': 'No JSON data received'}), 400
 
-        # 4. 🔐 SECURITY: Validate Per-User Webhook Secret
+        # 4. 🔐 SECURITY: Validate Per-User Webhook Secret (if configured)
         # Secret can be in body (preferred) or header
         provided_secret = data.get('secret') or request.headers.get('X-Webhook-Secret')
 
-        if not provided_secret:
-            logger.warning(f"[UNIFIED] ❌ No secret provided for {user_email}")
-            system_logs_service.add_log('error', f'🔐 [401] Missing secret for {user_email}', user_id=user_id)
-            return jsonify({
-                'error': 'Unauthorized - Secret required',
-                'hint': 'Include "secret" in JSON body or X-Webhook-Secret header'
-            }), 401
+        # Check if user has webhook_secret configured
+        user_has_secret = user_service.get_webhook_secret_by_license_key(license_key) is not None
 
-        if not user_service.validate_webhook_secret(license_key, provided_secret):
-            logger.warning(f"[UNIFIED] ❌ Invalid secret for {user_email}")
-            system_logs_service.add_log('error', f'🔐 [403] Invalid secret for {user_email}', user_id=user_id)
-            return jsonify({'error': 'Forbidden - Invalid secret'}), 403
+        if user_has_secret:
+            # User has secret configured - require validation
+            if not provided_secret:
+                logger.warning(f"[UNIFIED] ❌ No secret provided for {user_email}")
+                system_logs_service.add_log('error', f'🔐 [401] Missing secret for {user_email}', user_id=user_id)
+                return jsonify({
+                    'error': 'Unauthorized - Secret required',
+                    'hint': 'Include "secret" in JSON body or X-Webhook-Secret header'
+                }), 401
 
-        logger.info(f"[UNIFIED] ✅ User authenticated with valid secret: {user_email}")
+            if not user_service.validate_webhook_secret(license_key, provided_secret):
+                logger.warning(f"[UNIFIED] ❌ Invalid secret for {user_email}")
+                system_logs_service.add_log('error', f'🔐 [403] Invalid secret for {user_email}', user_id=user_id)
+                return jsonify({'error': 'Forbidden - Invalid secret'}), 403
+
+            logger.info(f"[UNIFIED] ✅ User authenticated with valid secret: {user_email}")
+        else:
+            # User has NOT configured secret - allow without secret (but log warning)
+            logger.info(f"[UNIFIED] ⚠️ No secret configured for {user_email} - allowing request")
 
         # Update last login
         user_service.update_last_login(user_id)
