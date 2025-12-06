@@ -94,13 +94,14 @@ class CommandQueue:
             logger.error(f"[COMMAND_QUEUE] ❌ Failed to add command for {account}: {e}", exc_info=True)
             return False
 
-    def get_pending_commands(self, account: str, limit: int = 10) -> List[Dict]:
+    def get_pending_commands(self, account: str, limit: int = 10, auto_ack: bool = True) -> List[Dict]:
         """
         ดึงคำสั่งที่รออยู่สำหรับ account นี้
 
         Args:
             account: หมายเลขบัญชี
             limit: จำนวนคำสั่งสูงสุดที่จะดึง
+            auto_ack: ถ้า True จะ mark commands เป็น acknowledged ทันที (ป้องกันการส่งซ้ำ)
 
         Returns:
             List[Dict]: รายการคำสั่งที่รออยู่
@@ -109,19 +110,28 @@ class CommandQueue:
             account = str(account).strip()
 
             with self._locks[account]:
-                # ดึงคำสั่งที่ยังไม่ acknowledged
-                pending = [
-                    cmd for cmd in self._queues[account]
-                    if not cmd.get('acknowledged', False)
-                ]
+                # ดึงคำสั่งที่ยังไม่ acknowledged (เก็บ reference โดยตรง ไม่ใช่ copy)
+                result = []
+                count = 0
+                for cmd in self._queues[account]:
+                    if count >= limit:
+                        break
+                    if not cmd.get('acknowledged', False):
+                        result.append(cmd)
+                        # Auto-acknowledge ทันทีเมื่อถูกดึงไป (ป้องกันการส่งซ้ำ)
+                        if auto_ack:
+                            cmd['acknowledged'] = True
+                            cmd['acknowledged_at'] = time.time()
+                            cmd['auto_acknowledged'] = True
+                            self._stats['total_commands_acknowledged'] += 1
+                        count += 1
 
-                # จำกัดจำนวน
-                result = pending[:limit]
-
-                # Update stats
                 if result:
-                    self._stats['total_commands_retrieved'] += len(result)
-                    logger.info(f"[COMMAND_QUEUE] 📤 Retrieved {len(result)} command(s) for {account}")
+                    if auto_ack:
+                        logger.info(f"[COMMAND_QUEUE] 📤 Retrieved and auto-acked {len(result)} command(s) for {account}")
+                    else:
+                        self._stats['total_commands_retrieved'] += len(result)
+                        logger.info(f"[COMMAND_QUEUE] 📤 Retrieved {len(result)} command(s) for {account}")
 
                 return result
 

@@ -148,7 +148,8 @@ def get_command_queue_status(account: str):
     try:
         account = str(account).strip()
         pending_count = command_queue.get_queue_size(account)
-        pending_commands = command_queue.get_pending_commands(account, limit=100)
+        # auto_ack=False: ดูสถานะอย่างเดียว ไม่ acknowledge
+        pending_commands = command_queue.get_pending_commands(account, limit=100, auto_ack=False)
 
         return jsonify({
             'success': True,
@@ -217,8 +218,8 @@ def debug_commands(account):
                 'error': 'Command queue not initialized'
             }), 500
 
-        # Get all commands for this account
-        commands = command_queue.get_pending_commands(account, limit=100)
+        # Get all commands for this account (auto_ack=False: debug only, don't consume)
+        commands = command_queue.get_pending_commands(account, limit=100, auto_ack=False)
 
         import time
         return jsonify({
