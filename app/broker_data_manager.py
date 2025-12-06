@@ -113,6 +113,10 @@ class BrokerDataManager:
         Returns:
             dict หรือ None
         """
+        # ✅ ALWAYS reload from file to get latest data
+        # (different instances may have saved new data)
+        self._load_from_file()
+        
         account = str(account).strip()
         return self.broker_data.get(account)
     
@@ -126,13 +130,22 @@ class BrokerDataManager:
         Returns:
             List[str]: รายชื่อ Symbol
         """
-        broker_info = self.get_broker_info(account)
+        # ✅ ALWAYS reload from file to get latest data
+        self._load_from_file()
+        
+        broker_info = self.broker_data.get(str(account).strip())
         
         if not broker_info:
             logger.warning(f"[BROKER_MANAGER] No broker info for account {account}")
             return []
         
-        symbols = [s['name'] for s in broker_info.get('symbols', [])]
+        # Handle both list of dicts and list of strings
+        symbols_data = broker_info.get('symbols', [])
+        if symbols_data and isinstance(symbols_data[0], dict):
+            symbols = [s.get('name', s) for s in symbols_data if s]
+        else:
+            symbols = [str(s) for s in symbols_data if s]
+        
         logger.debug(f"[BROKER_MANAGER] Account {account} has {len(symbols)} symbols")
         
         return symbols

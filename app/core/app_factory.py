@@ -281,7 +281,9 @@ def create_app():
         sls=system_logs_service,
         lim=limiter,
         cq=command_queue,
-        ch=copy_handler
+        ch=copy_handler,
+        bm=broker_manager,
+        blm=balance_manager
     )
 
     logger.info("[APP_FACTORY] Routes initialized (including unified endpoint)")

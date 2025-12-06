@@ -27,11 +27,13 @@ system_logs_service = None
 limiter = None
 command_queue = None  # Shared command queue instance
 copy_handler = None   # Shared copy handler instance
+broker_manager = None  # Shared broker data manager instance
+balance_manager = None  # Shared balance manager instance
 
 EXTERNAL_BASE_URL = os.getenv('EXTERNAL_BASE_URL', 'http://localhost:5000')
 
 
-def init_unified_routes(us, sm, ws, sls, lim, cq=None, ch=None):
+def init_unified_routes(us, sm, ws, sls, lim, cq=None, ch=None, bm=None, blm=None):
     """
     Initialize unified routes with dependencies
 
@@ -43,8 +45,10 @@ def init_unified_routes(us, sm, ws, sls, lim, cq=None, ch=None):
         lim: Limiter instance
         cq: CommandQueue instance (shared)
         ch: CopyHandler instance (shared)
+        bm: BrokerDataManager instance (shared)
+        blm: AccountBalanceManager instance (shared)
     """
-    global user_service, session_manager, webhook_service, system_logs_service, limiter, command_queue, copy_handler
+    global user_service, session_manager, webhook_service, system_logs_service, limiter, command_queue, copy_handler, broker_manager, balance_manager
     user_service = us
     session_manager = sm
     webhook_service = ws
@@ -52,7 +56,9 @@ def init_unified_routes(us, sm, ws, sls, lim, cq=None, ch=None):
     limiter = lim
     command_queue = cq
     copy_handler = ch
-    logger.info(f"[UNIFIED_ROUTES] Initialized with shared command_queue: {type(cq)}, copy_handler: {type(ch)}")
+    broker_manager = bm
+    balance_manager = blm
+    logger.info(f"[UNIFIED_ROUTES] Initialized with shared instances: command_queue={type(cq)}, copy_handler={type(ch)}, broker_manager={type(bm)}, balance_manager={type(blm)}")
 
 
 def _detect_request_type(data: dict) -> str:
@@ -831,10 +837,8 @@ def broker_register(license_key: str):
 
     # Account exists - update broker data and activate it
     try:
-        # Update broker data using save_broker_info
-        try:
-            from app.broker_data_manager import BrokerDataManager
-            broker_manager = BrokerDataManager()
+        # Update broker data using shared broker_manager instance
+        if broker_manager is not None:
             broker_manager.save_broker_info(account, {
                 'broker': broker,
                 'server': server,
@@ -842,8 +846,8 @@ def broker_register(license_key: str):
                 'user_id': user_id,
                 'last_update': datetime.now().isoformat()
             })
-        except Exception as e:
-            logger.warning(f"[BROKER_REGISTER] Could not update broker data: {e}")
+        else:
+            logger.warning(f"[BROKER_REGISTER] broker_manager not initialized")
 
         # ✅ FIX: Use activate_by_symbol() to properly activate account
         # This sets symbol_received=1 which is REQUIRED for Copy Trading to work
@@ -1070,16 +1074,15 @@ def check_balance_need_update(license_key: str, account: str):
     last_update = None
 
     try:
-        from app.account_balance import AccountBalanceManager
-        balance_manager = AccountBalanceManager()
+        # Use shared balance_manager instance
+        if balance_manager is not None:
+            if hasattr(balance_manager, 'need_balance_update'):
+                need_update = balance_manager.need_balance_update(account)
 
-        if hasattr(balance_manager, 'need_balance_update'):
-            need_update = balance_manager.need_balance_update(account)
-
-        if hasattr(balance_manager, 'get_last_update_time'):
-            last_update = balance_manager.get_last_update_time(account)
+            if hasattr(balance_manager, 'get_last_update_time'):
+                last_update = balance_manager.get_last_update_time(account)
     except Exception as e:
-        logger.debug(f"[BALANCE_CHECK] Balance manager not available: {e}")
+        logger.debug(f"[BALANCE_CHECK] Balance manager error: {e}")
 
     return jsonify({
         'success': True,
@@ -1145,32 +1148,32 @@ def update_account_balance(license_key: str):
 
     logger.info(f"[BALANCE_UPDATE] User {user_email}, Account {account}, Balance: {balance_data.get('balance')}")
 
-    # Update balance
+    # Update balance using shared balance_manager instance
     try:
-        from app.account_balance import AccountBalanceManager
-        balance_manager = AccountBalanceManager()
+        if balance_manager is None:
+            logger.warning("[BALANCE_UPDATE] balance_manager not initialized")
+        else:
+            # Extract numeric values (handle case where EA sends nested object)
+            raw_balance = data.get('balance', 0)
+            raw_equity = data.get('equity')
+            raw_margin = data.get('margin')
+            raw_free_margin = data.get('free_margin')
 
-        # Extract numeric values (handle case where EA sends nested object)
-        raw_balance = data.get('balance', 0)
-        raw_equity = data.get('equity')
-        raw_margin = data.get('margin')
-        raw_free_margin = data.get('free_margin')
+            # If balance is a dict, try to extract the actual value
+            if isinstance(raw_balance, dict):
+                raw_balance = raw_balance.get('value', raw_balance.get('balance', 0))
+            if isinstance(raw_equity, dict):
+                raw_equity = raw_equity.get('value', raw_equity.get('equity', 0))
+            if isinstance(raw_margin, dict):
+                raw_margin = raw_margin.get('value', raw_margin.get('margin', 0))
+            if isinstance(raw_free_margin, dict):
+                raw_free_margin = raw_free_margin.get('value', raw_free_margin.get('free_margin', 0))
 
-        # If balance is a dict, try to extract the actual value
-        if isinstance(raw_balance, dict):
-            raw_balance = raw_balance.get('value', raw_balance.get('balance', 0))
-        if isinstance(raw_equity, dict):
-            raw_equity = raw_equity.get('value', raw_equity.get('equity', 0))
-        if isinstance(raw_margin, dict):
-            raw_margin = raw_margin.get('value', raw_margin.get('margin', 0))
-        if isinstance(raw_free_margin, dict):
-            raw_free_margin = raw_free_margin.get('value', raw_free_margin.get('free_margin', 0))
-
-        # Call update_balance with individual parameters (not dict)
-        balance_manager.update_balance(
-            account=account,
-            balance=float(raw_balance) if raw_balance is not None else 0,
-            equity=float(raw_equity) if raw_equity is not None else None,
+            # Call update_balance with individual parameters (not dict)
+            balance_manager.update_balance(
+                account=account,
+                balance=float(raw_balance) if raw_balance is not None else 0,
+                equity=float(raw_equity) if raw_equity is not None else None,
             margin=float(raw_margin) if raw_margin is not None else None,
             free_margin=float(raw_free_margin) if raw_free_margin is not None else None,
             currency=data.get('currency', 'USD')
@@ -1218,16 +1221,13 @@ def get_account_balance(license_key: str, account: str):
         logger.warning(f"[GET_BALANCE] Unauthorized account {account} for {user_email}")
         return jsonify({'success': False, 'error': 'Unauthorized account'}), 403
 
-    # Get balance
+    # Get balance using shared balance_manager instance
     balance_data = None
     try:
-        from app.account_balance import AccountBalanceManager
-        balance_manager = AccountBalanceManager()
-
-        if hasattr(balance_manager, 'get_balance'):
+        if balance_manager is not None and hasattr(balance_manager, 'get_balance'):
             balance_data = balance_manager.get_balance(account)
     except Exception as e:
-        logger.debug(f"[GET_BALANCE] Balance manager not available: {e}")
+        logger.debug(f"[GET_BALANCE] Balance manager error: {e}")
 
     if balance_data:
         return jsonify({
