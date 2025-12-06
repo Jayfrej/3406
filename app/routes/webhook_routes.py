@@ -512,8 +512,11 @@ def _handle_ea_heartbeat(user_id: str, user_email: str, data: dict):
             'account': account
         }), 404
 
-    # Update account heartbeat (activate account)
-    session_manager.update_account_heartbeat(account)
+    # ✅ FIX: Use set_account_online() to change status to "Online"
+    if hasattr(session_manager, 'set_account_online'):
+        session_manager.set_account_online(account, broker)
+    else:
+        session_manager.update_account_heartbeat(account)
 
     logger.info(f"[HEARTBEAT] ✅ {user_email} → Account {account} is online")
 

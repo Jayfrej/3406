@@ -231,9 +231,13 @@ def _handle_heartbeat(user_id: str, user_email: str, data: dict):
             'account': account
         }), 404
 
-    # Update heartbeat (account is activated/online)
+    # Update heartbeat and set account online
     try:
-        session_manager.update_account_heartbeat(account)
+        # ✅ FIX: Use set_account_online() to change status to "Online"
+        if hasattr(session_manager, 'set_account_online'):
+            session_manager.set_account_online(account, broker)
+        else:
+            session_manager.update_account_heartbeat(account)
     except Exception as e:
         logger.warning(f"[HEARTBEAT] Update failed: {e}")
 
@@ -413,9 +417,14 @@ def ea_heartbeat(license_key: str):
 
     logger.info(f"[EA_HEARTBEAT] User {user_email}, Account {account}")
 
-    # Update heartbeat
+    # Update heartbeat and set account online
     try:
-        session_manager.update_account_heartbeat(account)
+        # ✅ FIX: Use set_account_online() to ensure status is "Online"
+        broker = data.get('broker', '')
+        if hasattr(session_manager, 'set_account_online'):
+            session_manager.set_account_online(account, broker)
+        else:
+            session_manager.update_account_heartbeat(account)
     except Exception as e:
         logger.warning(f"[EA_HEARTBEAT] Update failed: {e}")
 
@@ -598,11 +607,15 @@ def ea_register(license_key: str):
     user_accounts = user_service.get_user_accounts_list(user_id)
 
     if account in user_accounts:
-        # Account exists - activate it (update heartbeat)
+        # Account exists - activate it (change status to Online)
         try:
-            session_manager.update_account_heartbeat(account)
+            # ✅ FIX: Use set_account_online() to change status to "Online"
+            if hasattr(session_manager, 'set_account_online'):
+                session_manager.set_account_online(account, broker)
+            else:
+                session_manager.update_account_heartbeat(account)
         except Exception as e:
-            logger.warning(f"[EA_REGISTER] Could not update heartbeat: {e}")
+            logger.warning(f"[EA_REGISTER] Could not update account status: {e}")
 
         logger.info(f"[EA_REGISTER] ✅ Account {account} activated for {user_email}")
         return jsonify({
@@ -807,12 +820,18 @@ def broker_register(license_key: str):
         except Exception as e:
             logger.warning(f"[BROKER_REGISTER] Could not update broker data: {e}")
 
-        # Update heartbeat to mark account as ACTIVE/Online
+        # ✅ FIX: Use set_account_online() to change status to "Online"
+        # update_account_heartbeat() only updates last_seen, not status
         try:
-            session_manager.update_account_heartbeat(account)
-            logger.info(f"[BROKER_REGISTER] ✅ Account {account} ACTIVATED for {user_email}")
+            if hasattr(session_manager, 'set_account_online'):
+                session_manager.set_account_online(account, broker)
+                logger.info(f"[BROKER_REGISTER] ✅ Account {account} ACTIVATED (status: Online) for {user_email}")
+            else:
+                # Fallback to heartbeat if set_account_online not available
+                session_manager.update_account_heartbeat(account)
+                logger.info(f"[BROKER_REGISTER] ✅ Account {account} heartbeat updated for {user_email}")
         except Exception as e:
-            logger.warning(f"[BROKER_REGISTER] Could not update heartbeat: {e}")
+            logger.warning(f"[BROKER_REGISTER] Could not update account status: {e}")
 
         # Log success
         system_logs_service.add_log(
