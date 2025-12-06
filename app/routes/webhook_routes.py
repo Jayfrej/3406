@@ -489,6 +489,7 @@ def _detect_request_type(data: dict) -> str:
 def _handle_ea_heartbeat(user_id: str, user_email: str, data: dict):
     """
     Handle EA heartbeat - EA reports it's online.
+    ⚠️ Account must be added via Dashboard first!
     """
     account = str(data.get('account', '')).strip()
     broker = data.get('broker', '-')
@@ -502,15 +503,16 @@ def _handle_ea_heartbeat(user_id: str, user_email: str, data: dict):
     user_svc = UserService()
     user_accounts = user_svc.get_user_accounts_list(user_id)
 
+    # ⚠️ CHANGED: Do NOT auto-add accounts - user must add via Dashboard first
     if account not in user_accounts:
-        # Auto-add new account for this user
-        if hasattr(session_manager, 'add_remote_account_with_user'):
-            session_manager.add_remote_account_with_user(account, f"Account {account}", user_id)
-            logger.info(f"[HEARTBEAT] ✅ Auto-added account {account} for user {user_email}")
-        else:
-            session_manager.add_remote_account(account, f"Account {account}")
+        logger.warning(f"[HEARTBEAT] ❌ Account {account} not found for {user_email}. User must add account via Dashboard first!")
+        return jsonify({
+            'error': 'Account not found. Please add this account via Dashboard first.',
+            'hint': f'Go to Dashboard → Add Account → Enter account number: {account}',
+            'account': account
+        }), 404
 
-    # Update account heartbeat
+    # Update account heartbeat (activate account)
     session_manager.update_account_heartbeat(account)
 
     logger.info(f"[HEARTBEAT] ✅ {user_email} → Account {account} is online")

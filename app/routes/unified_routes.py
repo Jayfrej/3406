@@ -222,18 +222,16 @@ def _handle_heartbeat(user_id: str, user_email: str, data: dict):
     # Get user's accounts
     user_accounts = user_service.get_user_accounts_list(user_id)
 
+    # ⚠️ CHANGED: Do NOT auto-add accounts - user must add via Dashboard first
     if account not in user_accounts:
-        # Auto-add new account for this user
-        try:
-            if hasattr(session_manager, 'add_remote_account_with_user'):
-                session_manager.add_remote_account_with_user(account, f"Account {account}", user_id)
-            else:
-                session_manager.add_remote_account(account, f"Account {account}")
-            logger.info(f"[HEARTBEAT] ✅ Auto-added account {account} for {user_email}")
-        except Exception as e:
-            logger.warning(f"[HEARTBEAT] Could not auto-add account: {e}")
+        logger.warning(f"[HEARTBEAT] ❌ Account {account} not found for {user_email}. User must add account via Dashboard first!")
+        return jsonify({
+            'error': 'Account not found. Please add this account via Dashboard first.',
+            'hint': f'Go to Dashboard → Add Account → Enter account number: {account}',
+            'account': account
+        }), 404
 
-    # Update heartbeat
+    # Update heartbeat (account is activated/online)
     try:
         session_manager.update_account_heartbeat(account)
     except Exception as e:
@@ -564,9 +562,12 @@ def ea_confirm_execution(license_key: str):
 @unified_bp.route('/<license_key>/api/ea/register', methods=['POST'])
 def ea_register(license_key: str):
     """
-    EA ลงทะเบียน account ใหม่
+    EA ลงทะเบียน/Activate account (ต้องเพิ่ม account ผ่าน Dashboard ก่อน!)
 
     URL: https://yourdomain.com/{license_key}/api/ea/register
+
+    ⚠️ IMPORTANT: User must add account via Dashboard first!
+    This endpoint only ACTIVATES existing accounts, it does NOT auto-add new accounts.
 
     Body:
     {
@@ -593,49 +594,34 @@ def ea_register(license_key: str):
 
     logger.info(f"[EA_REGISTER] User {user_email}, Account {account}, Broker {broker}")
 
-    # Check if account already exists for this user
+    # Check if account exists for this user
     user_accounts = user_service.get_user_accounts_list(user_id)
 
     if account in user_accounts:
-        logger.info(f"[EA_REGISTER] Account {account} already registered for {user_email}")
+        # Account exists - activate it (update heartbeat)
+        try:
+            session_manager.update_account_heartbeat(account)
+        except Exception as e:
+            logger.warning(f"[EA_REGISTER] Could not update heartbeat: {e}")
+
+        logger.info(f"[EA_REGISTER] ✅ Account {account} activated for {user_email}")
         return jsonify({
             'success': True,
             'type': 'register',
             'user_id': user_id,
             'account': account,
-            'status': 'already_exists',
-            'message': 'Account already registered'
+            'status': 'activated',
+            'message': 'Account activated successfully'
         })
 
-    # Register new account
-    try:
-        if hasattr(session_manager, 'add_remote_account_with_user'):
-            session_manager.add_remote_account_with_user(account, f"{broker} - {account}", user_id)
-        else:
-            session_manager.add_remote_account(account, f"{broker} - {account}")
-
-        logger.info(f"[EA_REGISTER] ✅ Account {account} registered for {user_email}")
-        system_logs_service.add_log(
-            'success',
-            f'✅ New account registered: {account} ({broker})',
-            user_id=user_id
-        )
-
-        return jsonify({
-            'success': True,
-            'type': 'register',
-            'user_id': user_id,
-            'account': account,
-            'status': 'registered',
-            'message': 'Account registered successfully'
-        })
-
-    except Exception as e:
-        logger.error(f"[EA_REGISTER] Failed to register account: {e}")
-        return jsonify({
-            'success': False,
-            'error': f'Failed to register account: {str(e)}'
-        }), 500
+    # ⚠️ Account NOT found - user must add it via Dashboard first
+    logger.warning(f"[EA_REGISTER] ❌ Account {account} not found for {user_email}. User must add account via Dashboard first!")
+    return jsonify({
+        'success': False,
+        'error': 'Account not found. Please add this account via Dashboard first.',
+        'hint': f'Go to Dashboard → Add Account → Enter account number: {account}',
+        'account': account
+    }), 404
 
 
 @unified_bp.route('/<license_key>/api/ea/get_copy_pairs', methods=['GET'])
@@ -752,9 +738,12 @@ def ea_status(license_key: str):
 @unified_bp.route('/<license_key>/api/broker/register', methods=['POST'])
 def broker_register(license_key: str):
     """
-    EA registers broker/account information
+    EA registers broker/account information (ACTIVATE existing account)
 
     URL: https://yourdomain.com/{license_key}/api/broker/register
+
+    ⚠️ IMPORTANT: User must add account via Dashboard first!
+    This endpoint only ACTIVATES existing accounts, it does NOT auto-add new accounts.
 
     Body:
     {
@@ -788,29 +777,29 @@ def broker_register(license_key: str):
 
     logger.info(f"[BROKER_REGISTER] User {user_email}, Account {account}, Broker {broker}")
 
-    # Check if account already exists for this user
+    # Check if account exists for this user
     user_accounts = user_service.get_user_accounts_list(user_id)
 
-    # Register or update account
-    try:
-        if account not in user_accounts:
-            # New account - register it
-            if hasattr(session_manager, 'add_remote_account_with_user'):
-                session_manager.add_remote_account_with_user(account, f"{broker} - {account}", user_id)
-            else:
-                session_manager.add_remote_account(account, f"{broker} - {account}")
-            logger.info(f"[BROKER_REGISTER] ✅ New account {account} registered for {user_email}")
+    # ⚠️ CHANGED LOGIC: Do NOT auto-add accounts
+    # User must add account via Dashboard first, then EA activates it
+    if account not in user_accounts:
+        logger.warning(f"[BROKER_REGISTER] ❌ Account {account} not found for {user_email}. User must add account via Dashboard first!")
+        return jsonify({
+            'success': False,
+            'error': 'Account not found. Please add this account via Dashboard first.',
+            'hint': f'Go to Dashboard → Add Account → Enter account number: {account}',
+            'account': account
+        }), 404
 
-        # Update broker data
+    # Account exists - update broker data and activate it
+    try:
+        # Update broker data using save_broker_info
         try:
             from app.broker_data_manager import BrokerDataManager
             broker_manager = BrokerDataManager()
-            broker_manager.update_broker_data(account, {
+            broker_manager.save_broker_info(account, {
                 'broker': broker,
                 'server': server,
-                'balance': balance,
-                'equity': equity,
-                'currency': currency,
                 'symbols': symbols,
                 'user_id': user_id,
                 'last_update': datetime.now().isoformat()
@@ -818,11 +807,19 @@ def broker_register(license_key: str):
         except Exception as e:
             logger.warning(f"[BROKER_REGISTER] Could not update broker data: {e}")
 
-        # Update heartbeat
+        # Update heartbeat to mark account as ACTIVE/Online
         try:
             session_manager.update_account_heartbeat(account)
+            logger.info(f"[BROKER_REGISTER] ✅ Account {account} ACTIVATED for {user_email}")
         except Exception as e:
             logger.warning(f"[BROKER_REGISTER] Could not update heartbeat: {e}")
+
+        # Log success
+        system_logs_service.add_log(
+            'success',
+            f'✅ Account {account} activated by EA ({broker})',
+            user_id=user_id
+        )
 
         return jsonify({
             'success': True,
@@ -830,15 +827,15 @@ def broker_register(license_key: str):
             'user_id': user_id,
             'account': account,
             'broker': broker,
-            'status': 'registered',
-            'message': 'Broker data registered successfully'
+            'status': 'activated',
+            'message': 'Account activated successfully'
         })
 
     except Exception as e:
         logger.error(f"[BROKER_REGISTER] Failed: {e}")
         return jsonify({
             'success': False,
-            'error': f'Failed to register broker: {str(e)}'
+            'error': f'Failed to activate account: {str(e)}'
         }), 500
 
 
@@ -1105,15 +1102,32 @@ def update_account_balance(license_key: str):
         from app.account_balance import AccountBalanceManager
         balance_manager = AccountBalanceManager()
 
+        # Extract numeric values (handle case where EA sends nested object)
+        raw_balance = data.get('balance', 0)
+        raw_equity = data.get('equity')
+        raw_margin = data.get('margin')
+        raw_free_margin = data.get('free_margin')
+
+        # If balance is a dict, try to extract the actual value
+        if isinstance(raw_balance, dict):
+            raw_balance = raw_balance.get('value', raw_balance.get('balance', 0))
+        if isinstance(raw_equity, dict):
+            raw_equity = raw_equity.get('value', raw_equity.get('equity', 0))
+        if isinstance(raw_margin, dict):
+            raw_margin = raw_margin.get('value', raw_margin.get('margin', 0))
+        if isinstance(raw_free_margin, dict):
+            raw_free_margin = raw_free_margin.get('value', raw_free_margin.get('free_margin', 0))
+
         # Call update_balance with individual parameters (not dict)
         balance_manager.update_balance(
             account=account,
-            balance=balance_data.get('balance', 0),
-            equity=balance_data.get('equity'),
-            margin=balance_data.get('margin'),
-            free_margin=balance_data.get('free_margin'),
-            currency=balance_data.get('currency', 'USD')
+            balance=float(raw_balance) if raw_balance is not None else 0,
+            equity=float(raw_equity) if raw_equity is not None else None,
+            margin=float(raw_margin) if raw_margin is not None else None,
+            free_margin=float(raw_free_margin) if raw_free_margin is not None else None,
+            currency=data.get('currency', 'USD')
         )
+        logger.info(f"[BALANCE_UPDATE] ✅ Balance updated for {account}: {raw_balance}")
     except Exception as e:
         logger.warning(f"[BALANCE_UPDATE] Could not update balance: {e}")
 
